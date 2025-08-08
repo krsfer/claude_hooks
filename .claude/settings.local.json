@@ -33,7 +33,9 @@
       "Bash(./claude_hook_redis.sh:*)",
       "Bash(unset:*)",
       "Bash(gradle wrapper:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(play_audio.sh:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
