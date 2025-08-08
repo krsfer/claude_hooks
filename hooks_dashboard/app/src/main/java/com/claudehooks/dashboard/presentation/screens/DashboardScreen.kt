@@ -37,7 +37,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     var useTestData by remember { mutableStateOf(false) }
     val realRepository = remember { DataProvider.getRepository(context) }
-    val testRepository = remember { DataProvider.createTestRepository() }
+    val testRepository = remember { DataProvider.createTestRepository(context) }
     
     var selectedFilters by remember { mutableStateOf(emptySet<HookType>()) }
     var isRefreshing by remember { mutableStateOf(false) }

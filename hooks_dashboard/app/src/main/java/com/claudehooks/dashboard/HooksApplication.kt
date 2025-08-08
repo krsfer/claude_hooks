@@ -2,6 +2,7 @@ package com.claudehooks.dashboard
 
 import android.app.Application
 import android.util.Log
+import com.claudehooks.dashboard.notification.NotificationChannels
 import timber.log.Timber
 
 class HooksApplication : Application() {
@@ -12,6 +13,9 @@ class HooksApplication : Application() {
         // Initialize Timber for logging
         Timber.plant(Timber.DebugTree())
         
-        Timber.d("HooksApplication started")
+        // Create notification channels
+        NotificationChannels.createNotificationChannels(this)
+        
+        Timber.d("HooksApplication started with notification channels")
     }
 }

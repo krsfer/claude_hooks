@@ -1,10 +1,12 @@
 package com.claudehooks.dashboard.data.repository
 
+import android.content.Context
 import com.claudehooks.dashboard.data.mapper.HookDataMapper
 import com.claudehooks.dashboard.data.model.DashboardStats
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
 import com.claudehooks.dashboard.data.model.Severity
+import com.claudehooks.dashboard.notification.NotificationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,8 +24,9 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.random.Random
 
-class TestHookDataRepository {
+class TestHookDataRepository(private val context: Context? = null) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val notificationService = context?.let { NotificationService(it) }
     
     private val _events = MutableStateFlow<List<HookEvent>>(emptyList())
     val events: StateFlow<List<HookEvent>> = _events.asStateFlow()
@@ -131,6 +134,16 @@ class TestHookDataRepository {
         }
         
         _events.value = eventQueue.sortedByDescending { it.timestamp }
+        
+        // Trigger Android notification for notification-type events (if context provided)
+        if (event.type == HookType.NOTIFICATION && notificationService != null) {
+            try {
+                notificationService.showNotificationForHookEvent(event)
+                Timber.d("Triggered test notification for event: ${event.title}")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to show test notification for event: ${event.id}")
+            }
+        }
     }
     
     private fun getRandomPrompt(): String {

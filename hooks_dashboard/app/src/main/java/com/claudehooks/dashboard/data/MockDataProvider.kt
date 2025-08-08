@@ -33,8 +33,8 @@ object DataProvider {
         return HookDataRepository(config, context)
     }
     
-    fun createTestRepository(): TestHookDataRepository {
-        return TestHookDataRepository()
+    fun createTestRepository(context: Context): TestHookDataRepository {
+        return TestHookDataRepository(context)
     }
     
     // Fallback mock data for offline mode or testing

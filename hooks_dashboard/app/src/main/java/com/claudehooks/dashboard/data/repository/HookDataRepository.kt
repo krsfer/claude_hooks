@@ -7,6 +7,7 @@ import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
 import com.claudehooks.dashboard.data.remote.RedisConfig
 import com.claudehooks.dashboard.data.remote.RedisService
+import com.claudehooks.dashboard.notification.NotificationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ class HookDataRepository(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val redisService = RedisService(redisConfig, context)
+    private val notificationService = NotificationService(context)
     
     private val _events = MutableStateFlow<List<HookEvent>>(emptyList())
     val events: StateFlow<List<HookEvent>> = _events.asStateFlow()
@@ -99,6 +101,16 @@ class HookDataRepository(
         
         // Update the StateFlow
         _events.value = eventQueue.sortedByDescending { it.timestamp }
+        
+        // Trigger Android notification for notification-type events
+        if (event.type == HookType.NOTIFICATION) {
+            try {
+                notificationService.showNotificationForHookEvent(event)
+                Timber.d("Triggered Android notification for event: ${event.title}")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to show notification for event: ${event.id}")
+            }
+        }
     }
     
     fun getFilteredEvents(
