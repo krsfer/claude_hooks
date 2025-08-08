@@ -1,8 +1,10 @@
 package com.claudehooks.dashboard.data.model
 
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.util.UUID
 
+// Display model for the dashboard UI
 data class HookEvent(
     val id: String = UUID.randomUUID().toString(),
     val type: HookType,
@@ -14,7 +16,61 @@ data class HookEvent(
     val metadata: Map<String, String> = emptyMap()
 )
 
+// Redis data model matching the claude_hook_redis.sh output
+@Serializable
+data class RedisHookData(
+    val id: String,
+    val hook_type: String,
+    val timestamp: String,
+    val session_id: String,
+    val sequence: Long,
+    val core: CoreData,
+    val payload: PayloadData,
+    val context: ContextData,
+    val metrics: MetricsData? = null
+)
+
+@Serializable
+data class CoreData(
+    val status: String,
+    val execution_time_ms: Long
+)
+
+@Serializable
+data class PayloadData(
+    val prompt: String? = null,
+    val tool_name: String? = null,
+    val tool_input: String? = null,
+    val tool_response: String? = null,
+    val message: String? = null,
+    val notification_type: String? = null,
+    val compact_reason: String? = null
+)
+
+@Serializable
+data class ContextData(
+    val platform: String,
+    val cwd: String? = null,
+    val git_branch: String? = null,
+    val git_status: String? = null,
+    val user_agent: String? = null
+)
+
+@Serializable
+data class MetricsData(
+    val script_version: String? = null
+)
+
 enum class HookType {
+    SESSION_START,
+    USER_PROMPT_SUBMIT,
+    PRE_TOOL_USE,
+    POST_TOOL_USE,
+    NOTIFICATION,
+    STOP_HOOK,
+    SUB_AGENT_STOP_HOOK,
+    PRE_COMPACT,
+    // Legacy types for backward compatibility
     API_CALL,
     DATABASE,
     FILE_SYSTEM,
@@ -37,5 +93,7 @@ data class DashboardStats(
     val criticalCount: Int = 0,
     val warningCount: Int = 0,
     val successRate: Float = 0f,
-    val activeHooks: Int = 0
+    val activeHooks: Int = 0,
+    val activeSessions: Set<String> = emptySet(),
+    val recentSessionId: String? = null
 )

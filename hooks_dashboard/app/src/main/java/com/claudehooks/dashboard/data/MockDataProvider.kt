@@ -1,118 +1,112 @@
 package com.claudehooks.dashboard.data
 
+import android.content.Context
 import com.claudehooks.dashboard.data.model.DashboardStats
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
 import com.claudehooks.dashboard.data.model.Severity
+import com.claudehooks.dashboard.data.remote.RedisConfig
+import com.claudehooks.dashboard.data.repository.HookDataRepository
+import com.claudehooks.dashboard.data.repository.TestHookDataRepository
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.random.Random
 
-object MockDataProvider {
+object DataProvider {
     
+    private var _repository: HookDataRepository? = null
+    
+    fun getRepository(context: Context): HookDataRepository {
+        return _repository ?: createRepository(context).also { _repository = it }
+    }
+    
+    private fun createRepository(context: Context): HookDataRepository {
+        // Redis configuration from environment
+        val config = RedisConfig(
+            host = "redis-18773.c311.eu-central-1-1.ec2.redns.redis-cloud.com",
+            port = 18773,
+            password = "t7H13cIHhR2cm89qyk0y1nRZE2Iy73Pv",
+            useTls = true,
+            channel = "hooksdata"
+        )
+        
+        return HookDataRepository(config, context)
+    }
+    
+    fun createTestRepository(): TestHookDataRepository {
+        return TestHookDataRepository()
+    }
+    
+    // Fallback mock data for offline mode or testing
     fun generateMockHookEvents(): List<HookEvent> {
         val now = Instant.now()
         return listOf(
             HookEvent(
-                type = HookType.API_CALL,
-                title = "User Authentication",
-                message = "POST /api/v1/auth/login - Success",
+                type = HookType.SESSION_START,
+                title = "Session Started",
+                message = "Claude Code session initiated",
                 timestamp = now.minus(2, ChronoUnit.MINUTES),
-                source = "AuthService",
+                source = "Claude Code",
                 severity = Severity.INFO,
-                metadata = mapOf("user" to "john.doe@example.com", "ip" to "192.168.1.100")
+                metadata = mapOf("session_id" to "sess-mock-001", "platform" to "darwin")
             ),
             HookEvent(
-                type = HookType.DATABASE,
-                title = "Database Query Slow",
-                message = "Query execution time exceeded threshold (3.2s)",
+                type = HookType.USER_PROMPT_SUBMIT,
+                title = "User Prompt",
+                message = "Help me implement a Redis integration for my Android app...",
                 timestamp = now.minus(5, ChronoUnit.MINUTES),
-                source = "PostgreSQL",
-                severity = Severity.WARNING,
-                metadata = mapOf("query" to "SELECT * FROM users", "duration" to "3200ms")
+                source = "Claude Code",
+                severity = Severity.INFO,
+                metadata = mapOf("session_id" to "sess-mock-001", "sequence" to "1")
             ),
             HookEvent(
-                type = HookType.SECURITY,
-                title = "Failed Login Attempt",
-                message = "Multiple failed login attempts detected",
+                type = HookType.PRE_TOOL_USE,
+                title = "Tool Use: Read",
+                message = "Preparing to execute Read",
                 timestamp = now.minus(10, ChronoUnit.MINUTES),
-                source = "SecurityMonitor",
-                severity = Severity.CRITICAL,
-                metadata = mapOf("attempts" to "5", "ip" to "10.0.0.1")
+                source = "Tool: Read",
+                severity = Severity.INFO,
+                metadata = mapOf("session_id" to "sess-mock-001", "tool_name" to "Read")
             ),
             HookEvent(
-                type = HookType.FILE_SYSTEM,
-                title = "File Upload",
-                message = "Document uploaded successfully",
+                type = HookType.POST_TOOL_USE,
+                title = "Tool Completed: Read",
+                message = "Tool execution completed in 150ms",
                 timestamp = now.minus(15, ChronoUnit.MINUTES),
-                source = "FileService",
+                source = "Tool: Read",
                 severity = Severity.INFO,
-                metadata = mapOf("filename" to "report.pdf", "size" to "2.3MB")
+                metadata = mapOf("session_id" to "sess-mock-001", "execution_time_ms" to "150")
             ),
             HookEvent(
-                type = HookType.NETWORK,
-                title = "API Response Time",
-                message = "External API response time optimal",
+                type = HookType.NOTIFICATION,
+                title = "Notification: System",
+                message = "Redis connection established successfully",
                 timestamp = now.minus(20, ChronoUnit.MINUTES),
-                source = "NetworkMonitor",
+                source = "Claude Code",
                 severity = Severity.INFO,
-                metadata = mapOf("endpoint" to "payment-gateway", "latency" to "120ms")
+                metadata = mapOf("session_id" to "sess-mock-001", "notification_type" to "system")
             ),
             HookEvent(
-                type = HookType.PERFORMANCE,
-                title = "Memory Usage High",
-                message = "Application memory usage above 80%",
+                type = HookType.PRE_TOOL_USE,
+                title = "Tool Use: Edit",
+                message = "Preparing to execute Edit",
                 timestamp = now.minus(25, ChronoUnit.MINUTES),
-                source = "SystemMonitor",
-                severity = Severity.WARNING,
-                metadata = mapOf("usage" to "82%", "heap" to "1.8GB")
-            ),
-            HookEvent(
-                type = HookType.ERROR,
-                title = "Null Pointer Exception",
-                message = "NullPointerException in OrderService.processOrder()",
-                timestamp = now.minus(30, ChronoUnit.MINUTES),
-                source = "OrderService",
-                severity = Severity.ERROR,
-                metadata = mapOf("stacktrace" to "at OrderService.java:142")
-            ),
-            HookEvent(
-                type = HookType.API_CALL,
-                title = "Payment Processed",
-                message = "Payment transaction completed successfully",
-                timestamp = now.minus(35, ChronoUnit.MINUTES),
-                source = "PaymentService",
+                source = "Tool: Edit",
                 severity = Severity.INFO,
-                metadata = mapOf("amount" to "$299.99", "method" to "credit_card")
-            ),
-            HookEvent(
-                type = HookType.CUSTOM,
-                title = "Cache Cleared",
-                message = "Application cache cleared successfully",
-                timestamp = now.minus(40, ChronoUnit.MINUTES),
-                source = "CacheManager",
-                severity = Severity.INFO,
-                metadata = mapOf("size_cleared" to "450MB")
-            ),
-            HookEvent(
-                type = HookType.DATABASE,
-                title = "Connection Pool Exhausted",
-                message = "Database connection pool limit reached",
-                timestamp = now.minus(45, ChronoUnit.MINUTES),
-                source = "ConnectionPool",
-                severity = Severity.ERROR,
-                metadata = mapOf("max_connections" to "100", "active" to "100")
+                metadata = mapOf("session_id" to "sess-mock-002", "tool_name" to "Edit")
             )
         )
     }
     
     fun generateMockStats(): DashboardStats {
         return DashboardStats(
-            totalEvents = Random.nextInt(500, 2000),
-            criticalCount = Random.nextInt(5, 20),
-            warningCount = Random.nextInt(20, 50),
-            successRate = Random.nextFloat() * 20 + 80, // 80-100%
-            activeHooks = Random.nextInt(10, 30)
+            totalEvents = 24,
+            criticalCount = 0,
+            warningCount = 2,
+            successRate = 95.8f,
+            activeHooks = 6,
+            activeSessions = setOf("sess-mock-001", "sess-mock-002"),
+            recentSessionId = "sess-mock-001"
         )
     }
 }

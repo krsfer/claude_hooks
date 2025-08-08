@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.10"
 }
 
 android {
@@ -47,6 +48,13 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            pickFirsts += "META-INF/io.netty.versions.properties"
         }
     }
 }
@@ -56,6 +64,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     
     // Compose BOM - ensures compatible versions
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
@@ -64,6 +73,19 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    
+    // Redis Client
+    implementation("io.lettuce:lettuce-core:6.3.1.RELEASE")
+    
+    // Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    
+    // Logging
+    implementation("com.jakewharton.timber:timber:5.0.1")
     
     // Java 8+ API desugaring support
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")

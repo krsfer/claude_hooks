@@ -6,14 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -180,6 +173,15 @@ private fun SeverityChip(severity: Severity) {
 }
 
 private fun getTypeIcon(type: HookType): ImageVector = when (type) {
+    HookType.SESSION_START -> Icons.Default.PlayArrow
+    HookType.USER_PROMPT_SUBMIT -> Icons.Default.Message
+    HookType.PRE_TOOL_USE -> Icons.Default.Build
+    HookType.POST_TOOL_USE -> Icons.Default.Done
+    HookType.NOTIFICATION -> Icons.Default.Notifications
+    HookType.STOP_HOOK -> Icons.Default.Stop
+    HookType.SUB_AGENT_STOP_HOOK -> Icons.Default.StopCircle
+    HookType.PRE_COMPACT -> Icons.Default.Compress
+    // Legacy types
     HookType.API_CALL -> Icons.Default.Cloud
     HookType.DATABASE -> Icons.Default.Storage
     HookType.FILE_SYSTEM -> Icons.Default.Folder
@@ -191,6 +193,15 @@ private fun getTypeIcon(type: HookType): ImageVector = when (type) {
 }
 
 private fun getTypeColor(type: HookType): Color = when (type) {
+    HookType.SESSION_START -> Color(0xFF4CAF50)
+    HookType.USER_PROMPT_SUBMIT -> Color(0xFF2196F3)
+    HookType.PRE_TOOL_USE -> Color(0xFFFF9800)
+    HookType.POST_TOOL_USE -> Color(0xFF4CAF50)
+    HookType.NOTIFICATION -> Color(0xFF9C27B0)
+    HookType.STOP_HOOK -> Color(0xFFF44336)
+    HookType.SUB_AGENT_STOP_HOOK -> Color(0xFFE91E63)
+    HookType.PRE_COMPACT -> Color(0xFF00BCD4)
+    // Legacy types
     HookType.API_CALL -> Color(0xFF4CAF50)
     HookType.DATABASE -> Color(0xFF2196F3)
     HookType.FILE_SYSTEM -> Color(0xFFFF9800)

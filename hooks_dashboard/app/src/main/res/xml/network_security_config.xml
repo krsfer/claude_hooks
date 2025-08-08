@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">redis-18773.c311.eu-central-1-1.ec2.redns.redis-cloud.com</domain>
+        <trust-anchors>
+            <!-- Trust system CAs -->
+            <certificates src="system"/>
+            <!-- Allow user added CAs -->
+            <certificates src="user"/>
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- Allow cleartext traffic for debugging if needed -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

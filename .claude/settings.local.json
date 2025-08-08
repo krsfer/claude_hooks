@@ -35,7 +35,12 @@
       "Bash(gradle wrapper:*)",
       "Bash(mv:*)",
       "Bash(play_audio.sh:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(touch:*)",
+      "Bash(claude --version)",
+      "Bash(claude --debug)",
+      "Bash(cp:*)",
+      "Bash(adb shell am start:*)"
     ],
     "deny": []
   }

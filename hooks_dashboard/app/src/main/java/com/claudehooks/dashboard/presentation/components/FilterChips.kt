@@ -54,6 +54,15 @@ fun FilterChips(
 }
 
 private fun formatTypeName(type: HookType): String = when (type) {
+    HookType.SESSION_START -> "Session"
+    HookType.USER_PROMPT_SUBMIT -> "Prompt"
+    HookType.PRE_TOOL_USE -> "Pre-Tool"
+    HookType.POST_TOOL_USE -> "Post-Tool"
+    HookType.NOTIFICATION -> "Notification"
+    HookType.STOP_HOOK -> "Stop"
+    HookType.SUB_AGENT_STOP_HOOK -> "Sub-Agent"
+    HookType.PRE_COMPACT -> "Compact"
+    // Legacy types
     HookType.API_CALL -> "API"
     HookType.DATABASE -> "Database"
     HookType.FILE_SYSTEM -> "Files"
