@@ -117,12 +117,22 @@ class RedisService(
                 override fun message(channel: String, message: String) {
                     try {
                         if (channel == config.channel) {
-                            Timber.d("Received Redis message: ${message.take(100)}...")
+                            Timber.d("Received Redis message (full): $message")
                             val hookData = json.decodeFromString<RedisHookData>(message)
+                            
+                            // Debug log the parsed data structure
+                            Timber.d("Parsed hook data - type: ${hookData.hook_type}, tool_name: ${hookData.payload.tool_name}, " +
+                                    "notification_type: ${hookData.payload.notification_type}, message: ${hookData.payload.message}")
+                            
                             trySend(hookData).isSuccess
                         }
                     } catch (e: Exception) {
-                        Timber.e(e, "Failed to parse hook data: ${message.take(100)}...")
+                        Timber.e(e, "Failed to parse hook data - full message: $message")
+                        // Try to identify specific parsing issues
+                        if (message.contains("tool_name")) {
+                            val toolNameMatch = Regex("\"tool_name\"\\s*:\\s*\"([^\"]*)\"|\"tool_name\"\\s*:\\s*([^,}]+)").find(message)
+                            Timber.d("Found tool_name in JSON: ${toolNameMatch?.groupValues}")
+                        }
                     }
                 }
                 

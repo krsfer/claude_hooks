@@ -3,8 +3,10 @@ package com.claudehooks.dashboard.data.mapper
 import com.claudehooks.dashboard.data.model.DashboardStats
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
+import com.claudehooks.dashboard.data.model.PayloadData
 import com.claudehooks.dashboard.data.model.RedisHookData
 import com.claudehooks.dashboard.data.model.Severity
+import timber.log.Timber
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
@@ -38,17 +40,28 @@ object HookDataMapper {
     }
     
     private fun generateTitle(redisData: RedisHookData): String {
-        return when (redisData.hook_type) {
+        val title = when (redisData.hook_type) {
             "session_start" -> "Session Started"
             "user_prompt_submit" -> "User Prompt"
-            "pre_tool_use" -> "Tool Use: ${redisData.payload.tool_name ?: "Unknown"}"
-            "post_tool_use" -> "Tool Completed: ${redisData.payload.tool_name ?: "Unknown"}"
+            "pre_tool_use" -> {
+                val toolName = extractToolName(redisData.payload)
+                Timber.d("pre_tool_use - extracted tool name: '$toolName'")
+                "Tool Use: $toolName"
+            }
+            "post_tool_use" -> {
+                val toolName = extractToolName(redisData.payload)
+                Timber.d("post_tool_use - extracted tool name: '$toolName'")
+                "Tool Completed: $toolName"
+            }
             "notification" -> "Notification: ${redisData.payload.notification_type ?: "System"}"
             "stop_hook" -> "Session Stopped"
             "sub_agent_stop_hook" -> "Sub-Agent Stopped"
             "pre_compact" -> "Pre-Compact: ${redisData.payload.compact_reason ?: "Memory"}"
             else -> "Hook Event"
         }
+        
+        Timber.d("Generated title for ${redisData.hook_type}: '$title'")
+        return title
     }
     
     private fun generateMessage(redisData: RedisHookData): String {
@@ -66,9 +79,77 @@ object HookDataMapper {
         } ?: "Event occurred"
     }
     
+    private fun extractToolName(payload: PayloadData): String {
+        // If tool_name is "unknown", try to extract from other sources
+        val toolName = when {
+            payload.tool_name != null && payload.tool_name != "unknown" -> payload.tool_name
+            payload.name != null -> payload.name
+            payload.tool != null -> payload.tool
+            payload.command != null -> payload.command
+            payload.action != null -> payload.action
+            else -> extractToolFromInput(payload.tool_input) 
+                ?: extractToolFromInput(payload.tool_input_preview)
+                ?: inferToolFromContext(payload)
+        }
+        
+        Timber.d("Tool name extraction - tool_name: '${payload.tool_name}', name: '${payload.name}', " +
+                "tool: '${payload.tool}', command: '${payload.command}', action: '${payload.action}', " +
+                "tool_input: '${payload.tool_input?.take(50)}...', " +
+                "tool_input_preview: '${payload.tool_input_preview?.take(50)}...', result: '$toolName'")
+        
+        return toolName ?: "Unknown"
+    }
+    
+    private fun extractToolFromInput(toolInput: String?): String? {
+        if (toolInput.isNullOrEmpty()) return null
+        
+        try {
+            // Try to extract tool name from tool_input JSON structure
+            // Common patterns: {"command": "ls"}, {"file_path": "/path"}, etc.
+            val commandMatch = Regex("\"command\"\\s*:\\s*\"([^\"]+)\"").find(toolInput)
+            if (commandMatch != null) {
+                val command = commandMatch.groupValues[1]
+                // Extract just the command name (first word)
+                return command.split(" ").firstOrNull()?.takeIf { it.isNotEmpty() }
+            }
+            
+            // Check for specific tool patterns
+            when {
+                toolInput.contains("\"file_path\"\\s*:".toRegex()) -> return "Read"
+                toolInput.contains("\"pattern\"\\s*:".toRegex()) -> return "Grep"
+                toolInput.contains("\"path\"\\s*:".toRegex()) -> return "LS"
+                toolInput.contains("\"content\"\\s*:".toRegex()) -> return "Write"
+                toolInput.contains("\"old_string\"\\s*:".toRegex()) -> return "Edit"
+                toolInput.contains("\"url\"\\s*:".toRegex()) -> return "WebFetch"
+                toolInput.contains("\"query\"\\s*:".toRegex()) -> return "WebSearch"
+                toolInput.contains("\"description\"\\s*:".toRegex()) -> return "Task"
+                toolInput.contains("\"prompt\"\\s*:".toRegex()) -> return "UserPrompt"
+            }
+            
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to extract tool name from tool_input: $toolInput")
+        }
+        
+        return null
+    }
+    
+    private fun inferToolFromContext(payload: PayloadData): String? {
+        // Try to infer tool from context clues in the payload
+        return when {
+            payload.message?.contains("file", ignoreCase = true) == true -> "File"
+            payload.message?.contains("command", ignoreCase = true) == true -> "Bash"
+            payload.message?.contains("search", ignoreCase = true) == true -> "Search"
+            payload.message?.contains("web", ignoreCase = true) == true -> "Web"
+            payload.message?.contains("edit", ignoreCase = true) == true -> "Edit"
+            payload.message?.contains("write", ignoreCase = true) == true -> "Write"
+            payload.message?.contains("read", ignoreCase = true) == true -> "Read"
+            else -> null
+        }
+    }
+    
     private fun generateSource(redisData: RedisHookData): String {
         return when {
-            redisData.payload.tool_name != null -> "Tool: ${redisData.payload.tool_name}"
+            extractToolName(redisData.payload) != "Unknown" -> "Tool: ${extractToolName(redisData.payload)}"
             redisData.context.git_branch != null -> "Git: ${redisData.context.git_branch}"
             redisData.context.platform != null -> "Platform: ${redisData.context.platform}"
             else -> "Claude Code"

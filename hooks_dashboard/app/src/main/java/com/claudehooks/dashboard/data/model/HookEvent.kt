@@ -41,10 +41,16 @@ data class PayloadData(
     val prompt: String? = null,
     val tool_name: String? = null,
     val tool_input: String? = null,
+    val tool_input_preview: String? = null,
     val tool_response: String? = null,
     val message: String? = null,
     val notification_type: String? = null,
-    val compact_reason: String? = null
+    val compact_reason: String? = null,
+    // Additional potential field names for tool information
+    val name: String? = null,
+    val tool: String? = null,
+    val command: String? = null,
+    val action: String? = null
 )
 
 @Serializable
