@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Claude Hooks Dashboard</string>
+    <string name="dashboard_title">Claude Code Hooks</string>
+    <string name="connection_status_connected">Connected to Redis</string>
+    <string name="connection_status_disconnected">Disconnected from Redis</string>
+    <string name="connection_failed">Connection Failed</string>
+    <string name="retry_connection">Retry Connection</string>
+    <string name="search_hooks">Search hooks…</string>
+    <string name="no_hooks_found">No hooks found</string>
+    <string name="no_hooks_matching_filters">No hooks match your filters</string>
+    <string name="clear_filters">Clear Filters</string>
+    <string name="apply_filters">Apply Filters</string>
+    <string name="export_json">Export as JSON</string>
+    <string name="export_csv">Export as CSV</string>
+    <string name="total_hooks">Total Hooks</string>
+    <string name="active_sessions">Active Sessions</string>
+    <string name="success_rate">Success Rate</string>
+    <string name="avg_execution_time">Avg Execution Time</string>
+    <string name="hooks_per_hour">Hooks/Hour</string>
+    <string name="hook_type_distribution">Hook Type Distribution</string>
+    <string name="platform_distribution">Platform Distribution</string>
+    <string name="session_id">Session ID</string>
+    <string name="hook_types">Hook Types</string>
+    <string name="status">Status</string>
+    <string name="platform">Platform</string>
+    <string name="tool_names">Tool Names</string>
+    <string name="time_range">Time Range</string>
+    <string name="last_hour">Last Hour</string>
+    <string name="last_24h">Last 24h</string>
+    <string name="all_time">All Time</string>
+    <string name="all_sessions">All sessions</string>
+    <string name="all_tools">All tools</string>
+    <string name="scroll_to_top">Scroll to top</string>
+    <string name="close_search">Close search</string>
+    <string name="filters">Filters</string>
+    <string name="export">Export</string>
+    <string name="refresh">Refresh</string>
+    <string name="reconnect">Reconnect</string>
+</resources>
