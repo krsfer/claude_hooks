@@ -1,20 +1,14 @@
 package com.claudehooks.dashboard
 
 import android.app.Application
-import dagger.hilt.android.HiltAndroidApp
-import timber.log.Timber
+import android.util.Log
 
-@HiltAndroidApp
 class HooksApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize Timber for logging
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        }
-        
-        Timber.d("HooksApplication started")
+        // Initialize basic logging
+        Log.d("HooksApp", "HooksApplication started")
     }
 }

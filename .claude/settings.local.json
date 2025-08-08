@@ -31,7 +31,9 @@
       "Bash(cat:*)",
       "Bash(DEBUG=1 ./test_claude_hook_redis.sh --quick)",
       "Bash(./claude_hook_redis.sh:*)",
-      "Bash(unset:*)"
+      "Bash(unset:*)",
+      "Bash(gradle wrapper:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }

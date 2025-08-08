@@ -9,17 +9,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.claudehooks.dashboard.presentation.screens.DashboardScreen
 import com.claudehooks.dashboard.presentation.theme.HooksDashboardTheme
-import com.claudehooks.dashboard.presentation.ui.DashboardScreen
-import dagger.hilt.android.AndroidEntryPoint
 
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Install splash screen
-        installSplashScreen()
-        
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
