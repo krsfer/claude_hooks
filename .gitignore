@@ -1,0 +1,73 @@
+# Android Studio
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizard.xml
+/.idea/
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+
+# Keystore files
+*.jks
+*.keystore
+
+# Log Files
+*.log
+
+# Android NDK
+obj/
+
+# IntelliJ IDEA
+*.iws
+/out/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python (for test client)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Gradle Wrapper
+!gradle-wrapper.jar

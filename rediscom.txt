@@ -1,0 +1,3 @@
+# Always push + trim to maintain max 50 messages
+redis-tls -h $REDIS_HOST -a $REDIS_PASSWORD LPUSH hooks-queue '{"message": "new message", "timestamp": "'$(date -Iseconds)'"}'
+redis-tls -h $REDIS_HOST -a $REDIS_PASSWORD LTRIM hooks-queue 0 49

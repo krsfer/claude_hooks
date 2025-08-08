@@ -1,0 +1,50 @@
+Claude Code provides 8 different hook events that execute at various points in the workflow lifecycle:
+1. SessionStart
+
+When it runs: When Claude Code starts a new session or resumes an existing session
+Use cases: Loading development context, git status, recent issues, context files
+Payload includes: session_id, transcript_path, cwd, source (startup/resume/clear)
+
+2. UserPromptSubmit
+
+When it runs: Immediately when user submits a prompt (before Claude processes it)
+Use cases: Prompt validation, logging, context injection, security filtering
+Payload includes: prompt text, session_id, timestamp
+Special behavior: stdout is added to context for this hook
+
+3. PreToolUse
+
+When it runs: Before any tool execution
+Use cases: Blocking dangerous commands, permission checks, logging tool usage
+Payload includes: tool_name, tool_input parameters
+Can block execution: Yes (exit code 2)
+
+4. PostToolUse
+
+When it runs: After successful tool completion
+Use cases: Post-processing, cleanup, notifications
+Payload includes: tool_name, tool_input, tool_response with results
+
+5. Notification
+
+When it runs: When Claude Code sends notifications (waiting for input, etc.)
+Use cases: Desktop notifications, TTS alerts, custom notification systems
+Payload includes: message content
+
+6. StopHook
+
+When it runs: When Claude Code finishes responding
+Use cases: Completion notifications, cleanup tasks
+Payload includes: stop_hook_active boolean flag
+
+7. SubAgentStopHook
+
+When it runs: When Claude Code subagents (Task tools) finish responding
+Use cases: Subagent completion notifications, result processing
+Payload includes: stop_hook_active boolean flag
+
+8. PreCompact
+
+When it runs: Before Claude Code performs a compaction operation
+Use cases: Transcript backup, verbose feedback for manual compaction
+Payload includes: trigger (manual/auto), custom_instructions, session info

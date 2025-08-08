@@ -1,0 +1,50 @@
+{
+  "id": "uuid-v4",
+  "hook_type": "session_start|user_prompt_submit|pre_tool_use|post_tool_use|notification|stop_hook|sub_agent_stop_hook|pre_compact",
+  "timestamp": "2025-08-07T10:30:45.123Z",
+  "session_id": "session-uuid",
+  "sequence": 42,
+  
+  "core": {
+    "source": "startup|resume|clear|manual|auto",
+    "status": "pending|success|blocked|error",
+    "execution_time_ms": 150
+  },
+  
+  "payload": {
+    "prompt": "text content for user_prompt_submit",
+    "tool_name": "bash|read|edit|etc for tool hooks",
+    "tool_input": { "key": "value" },
+    "tool_response": { "results": "data" },
+    "message": "notification content",
+    "trigger": "manual|auto for pre_compact",
+    "custom_instructions": "text for pre_compact",
+    "transcript_path": "/path/to/transcript",
+    "cwd": "/current/working/directory",
+    "stop_hook_active": true,
+    "exit_code": 0
+  },
+  
+  "context": {
+    "user_agent": "claude-code-v1.2.3",
+    "platform": "darwin|linux|windows", 
+    "git_branch": "main",
+    "git_status": "clean|dirty",
+    "project_type": "react|kotlin|python|unknown"
+  },
+  
+  "metrics": {
+    "token_count": 1500,
+    "response_size_bytes": 4096,
+    "tools_used_count": 3,
+    "error_count": 0
+  },
+  
+  "tags": ["development", "tool_use", "security"],
+  
+  "relations": {
+    "parent_hook_id": "uuid-for-chaining",
+    "conversation_id": "uuid-for-grouping",
+    "batch_id": "uuid-for-bulk-ops"
+  }
+}

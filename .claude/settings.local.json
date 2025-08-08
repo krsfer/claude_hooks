@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(./gradlew:*)",
+      "Bash(python:*)",
+      "Bash(blueutil:*)",
+      "Bash(chmod:*)",
+      "Bash(brew install:*)",
+      "Bash(./send_bt_message.sh:*)",
+      "Bash(./manual_bt_test.sh:*)",
+      "Bash(pip3 install:*)",
+      "Bash(./connect_new_device.sh:*)",
+      "Bash(./test_notification.sh:*)",
+      "Bash(adb logcat:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(bash:*)",
+      "Bash(/Users/chris/dev/src/android/claude_hooks/claude_hook_redis.sh:*)",
+      "Bash([ -f ~/.claude/redis_config.env ])",
+      "Bash(source:*)",
+      "Bash(mkdir:*)",
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(./setup_redis_env.sh:*)",
+      "Bash(redis-cli:*)",
+      "Bash(redis-tls:*)",
+      "Bash(./test_claude_hook_redis.sh:*)",
+      "Bash(cat:*)",
+      "Bash(DEBUG=1 ./test_claude_hook_redis.sh --quick)",
+      "Bash(./claude_hook_redis.sh:*)",
+      "Bash(unset:*)"
+    ],
+    "deny": []
+  }
+}

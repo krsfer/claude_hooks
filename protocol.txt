@@ -1,0 +1,97 @@
+Redis Storage Patterns
+
+Key Strategies
+
+Primary Keys:
+  - hooks:{session_id}:{sequence}     # Individual hook storage
+  - hooks:index:{hook_type}           # Type-based indexes (ZSET with timestamp scores)
+  - hooks:session:{session_id}        # Session aggregation (HASH)
+  - hooks:stats:{date}                # Daily statistics (HASH)
+  - hooks:queue:pending               # Processing queue (LIST)
+
+Secondary Indexes:
+  - hooks:by_tool:{tool_name}         # Tool usage tracking (ZSET)
+  - hooks:by_status:{status}          # Status monitoring (ZSET) 
+  - hooks:errors                      # Error tracking (ZSET)
+  - hooks:active_sessions             # Live session tracking (SET)
+Optimized Storage Commands
+
+# Store hook with indexes
+MULTI
+HSET hooks:${session_id}:${sequence} data '${json}'
+ZADD hooks:index:${hook_type} ${timestamp} ${session_id}:${sequence}
+ZADD hooks:by_tool:${tool_name} ${timestamp} ${session_id}:${sequence}  
+HINCRBY hooks:stats:${date} ${hook_type}_count 1
+EXEC
+
+# Efficient queuing with size limit
+LPUSH hooks:queue:pending '${json}'
+LTRIM hooks:queue:pending 0 49
+
+# Session aggregation
+HSET hooks:session:${session_id} 
+  last_activity ${timestamp}
+  hook_count ${count}
+  status active
+  start_time ${start_timestamp}
+Type-Specific Field Mapping
+
+Required Fields by Hook Type
+
+session_start: [session_id, source, cwd, transcript_path]
+user_prompt_submit: [session_id, prompt, timestamp]
+pre_tool_use: [session_id, tool_name, tool_input]
+post_tool_use: [session_id, tool_name, tool_input, tool_response, execution_time_ms]
+notification: [session_id, message]
+stop_hook: [session_id, stop_hook_active]
+sub_agent_stop_hook: [session_id, stop_hook_active] 
+pre_compact: [session_id, trigger, custom_instructions]
+Optional Fields Enhancement
+
+Common Optional: [tags, context, metrics, relations]
+Tool-specific: [exit_code, error_message, retry_count]
+Performance: [memory_usage, cpu_time, network_calls]
+Security: [user_permissions, blocked_reason, risk_level]
+Incremental Updates & Aggregations
+
+Update Patterns
+
+{
+  "update_type": "append|merge|replace",
+  "update_path": "payload.tool_response",
+  "update_data": { "new": "data" },
+  "version": 2
+}
+Aggregation Structure
+
+{
+  "session_summary": {
+    "session_id": "uuid",
+    "start_time": "iso8601", 
+    "end_time": "iso8601",
+    "duration_ms": 45000,
+    "hook_counts": {
+      "user_prompt_submit": 5,
+      "pre_tool_use": 12,
+      "post_tool_use": 12,
+      "notification": 3
+    },
+    "tools_used": ["bash", "read", "edit"],
+    "error_count": 1,
+    "total_tokens": 15000,
+    "status": "completed|active|error"
+  }
+}
+Benefits of This Structure
+
+Universal Compatibility: Single schema handles all 8 hook types
+Redis Efficiency:
+Hash storage for fast field access
+ZSET indexes for time-based queries
+List queues for processing
+Minimal Duplication: Common fields in core, type-specific in payload
+Incremental Updates: Version tracking and partial updates
+Query Optimization: Multiple index strategies for different access patterns
+Aggregation Ready: Built-in fields for metrics and session summaries
+Extensible: Tags and relations support future requirements
+This structure provides efficient Redis storage while maintaining flexibility for all Claude Code hook types and supporting complex querying and aggregation patterns.

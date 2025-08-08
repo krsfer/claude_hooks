@@ -1,0 +1,82 @@
+Redis storage when hooks are invoked:
+
+{
+  // Required fields for ALL hooks
+  "id": "uuid-v4",
+  "hook_type": "tool_use_blocked|tool_use_result|user_message|assistant_message|user_prompt_submit",
+  "timestamp": "2025-01-07T10:30:45.123Z",
+  "session_id": "session-uuid",
+  "sequence": 42,  // Incremental counter within session
+  
+  // Core fields (always present but values optional)
+  "core": {
+    "status": "success|blocked|error",
+    "execution_time_ms": 5
+  },
+  
+  // Dynamic payload based on hook_type (all fields optional)
+  "payload": {
+    // For user/assistant messages
+    "message": "content",
+    "message_type": "command|question|response",
+    
+    // For tool hooks
+    "tool_name": "Bash|Read|Edit|Write",
+    "tool_input": {},
+    "tool_output": {},
+    "tool_error": "error message if failed",
+    
+    // For blocked hooks
+    "blocked_reason": "security rule violation",
+    "blocked_rule": "pattern_name",
+    
+    // For modifications
+    "original": "original content",
+    "modified": "modified content"
+  },
+  
+  // Optional context fields
+  "context": {
+    "cwd": "/current/directory",
+    "git_branch": "main",
+    "platform": "darwin"
+  },
+  
+  // Optional metrics
+  "metrics": {
+    "token_count": 150,
+    "response_size": 4096
+  },
+  
+  // Optional relations for chaining
+  "relations": {
+    "parent_id": "previous-hook-id",
+    "batch_id": "bulk-operation-id"
+  }
+}
+Redis Storage Strategy
+
+# Primary storage (Hash for each hook)
+HSET hook:{session_id}:{sequence} data '{json}'
+
+# Indexes for queries (Sorted Sets by timestamp)
+ZADD hooks:by_type:{hook_type} {timestamp} {session_id}:{sequence}
+ZADD hooks:by_session:{session_id} {timestamp} {sequence}
+
+# Counters for statistics (Incremental)
+HINCRBY stats:{session_id} {hook_type}_count 1
+HINCRBY stats:daily:{YYYY-MM-DD} {hook_type}_count 1
+
+# Recent activity (List with trimming)
+LPUSH recent:hooks '{mini_json}'
+LTRIM recent:hooks 0 99
+Key Features:
+
+Minimal Required Fields: Only 5 required fields
+Type-Specific Payloads: Optional fields based on hook_type
+Efficient Storage: Uses Redis Hashes, ZSets, and Lists
+Fast Queries: Multiple indexes for different access patterns
+Incremental Updates: Counters and statistics updated atomically
+Memory Efficient: Optional fields omitted when not needed
+This structure allows each hook invocation to store only relevant data while maintaining a consistent schema for processing and querying.
+
