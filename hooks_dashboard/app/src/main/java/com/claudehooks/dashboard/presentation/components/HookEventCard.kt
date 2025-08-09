@@ -1,6 +1,7 @@
 package com.claudehooks.dashboard.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +42,7 @@ fun HookEventCard(
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf(Instant.now()) }
+    var showAbsoluteTime by remember { mutableStateOf(false) }
     
     LaunchedEffect(event.timestamp) {
         while (true) {
@@ -132,13 +134,17 @@ fun HookEventCard(
                             imageVector = Icons.Outlined.Schedule,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = getTimeAgeColor(event.timestamp, currentTime)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = formatDurationAge(event.timestamp, currentTime),
+                            text = if (showAbsoluteTime) formatAbsoluteTime(event.timestamp) 
+                                   else formatDurationAge(event.timestamp, currentTime),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = getTimeAgeColor(event.timestamp, currentTime),
+                            modifier = Modifier.clickable { 
+                                showAbsoluteTime = !showAbsoluteTime 
+                            }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Icon(
@@ -227,25 +233,50 @@ private fun getTypeColor(type: HookType): Color = when (type) {
 }
 
 private fun formatDurationAge(timestamp: Instant, currentTime: Instant): String {
-    // Format the execution datetime
-    val formatter = DateTimeFormatter.ofPattern("dd HH:mm:ss")
-        .withZone(ZoneId.systemDefault())
-    val executionTime = formatter.format(timestamp)
-    
-    // Calculate duration
+    return formatRelativeTime(timestamp, currentTime)
+}
+
+/**
+ * Enhanced relative time formatting with intuitive display
+ * Examples: "just now", "5s ago", "2m ago", "1h ago", "3d ago"
+ */
+private fun formatRelativeTime(timestamp: Instant, currentTime: Instant): String {
     val totalSeconds = ChronoUnit.SECONDS.between(timestamp, currentTime)
     
-    val days = (totalSeconds / 86400).toInt()
-    val hours = ((totalSeconds % 86400) / 3600).toInt()
-    val minutes = ((totalSeconds % 3600) / 60).toInt()
-    val seconds = (totalSeconds % 60).toInt()
+    return when {
+        totalSeconds < 10 -> "just now"
+        totalSeconds < 60 -> "${totalSeconds}s ago"
+        totalSeconds < 3600 -> "${totalSeconds / 60}m ago"
+        totalSeconds < 86400 -> "${totalSeconds / 3600}h ago"
+        totalSeconds < 2592000 -> "${totalSeconds / 86400}d ago" // 30 days
+        else -> {
+            // For very old events, show the date
+            val formatter = DateTimeFormatter.ofPattern("MMM dd")
+                .withZone(ZoneId.systemDefault())
+            formatter.format(timestamp)
+        }
+    }
+}
+
+/**
+ * Get color based on event age for visual hierarchy
+ */
+private fun getTimeAgeColor(timestamp: Instant, currentTime: Instant): Color {
+    val totalSeconds = ChronoUnit.SECONDS.between(timestamp, currentTime)
     
-    val daysStr = if (days == 0) "  " else String.format("%02d", days)
-    val hoursStr = if (hours == 0 && days == 0) "  " else String.format("%02d", hours)
-    val minutesStr = if (minutes == 0 && hours == 0 && days == 0) "  " else String.format("%02d", minutes)
-    val secondsStr = if (seconds == 0 && minutes == 0 && hours == 0 && days == 0) "  " else String.format("%02d", seconds)
-    
-    val duration = "$daysStr $hoursStr:$minutesStr:$secondsStr"
-    
-    return "$executionTime $duration ago"
+    return when {
+        totalSeconds < 300 -> Color(0xFF4CAF50)     // Fresh: Green (< 5 min)
+        totalSeconds < 3600 -> Color(0xFF2196F3)    // Recent: Blue (< 1 hour)  
+        totalSeconds < 86400 -> Color(0xFFFF9800)   // Today: Orange (< 1 day)
+        else -> Color(0xFF9E9E9E)                   // Old: Gray (> 1 day)
+    }
+}
+
+/**
+ * Format absolute timestamp for tap-to-reveal functionality
+ */
+private fun formatAbsoluteTime(timestamp: Instant): String {
+    val formatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
+    return formatter.format(timestamp)
 }

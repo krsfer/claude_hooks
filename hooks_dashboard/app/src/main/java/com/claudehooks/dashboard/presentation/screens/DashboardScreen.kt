@@ -17,22 +17,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.claudehooks.dashboard.data.DataProvider
 import com.claudehooks.dashboard.data.model.DashboardStats
+import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
-import com.claudehooks.dashboard.data.repository.ConnectionStatus
+import com.claudehooks.dashboard.data.repository.BackgroundServiceRepository
+import com.claudehooks.dashboard.service.ConnectionStatus
+import com.claudehooks.dashboard.data.repository.ConnectionStatus as LegacyConnectionStatus
 import com.claudehooks.dashboard.presentation.components.FilterChips
 import com.claudehooks.dashboard.presentation.components.HookEventCard
 import com.claudehooks.dashboard.presentation.components.StatsCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
+    repository: BackgroundServiceRepository? = null,
+    onQuitRequested: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var useTestData by remember { mutableStateOf(false) }
-    val realRepository = remember { DataProvider.getRepository(context) }
+    val fallbackRepository = remember { DataProvider.getRepository(context) }
     val testRepository = remember { DataProvider.createTestRepository(context) }
     
     var selectedFilters by remember { mutableStateOf(emptySet<HookType>()) }
@@ -40,32 +48,58 @@ fun DashboardScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Choose repository based on mode
-    val currentRepository = if (useTestData) null else realRepository
+    // Use provided BackgroundServiceRepository or fall back to legacy repository
+    val useBackgroundService = repository != null
+    val currentRepository = if (useTestData) null else (repository ?: fallbackRepository)
     
     // Observe data from appropriate repository
     val hookEvents by if (useTestData) {
         testRepository.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
+    } else if (useBackgroundService) {
+        repository!!.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
     } else {
-        realRepository.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
+        fallbackRepository.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
     }
     
     val stats by if (useTestData) {
         testRepository.getDashboardStats().collectAsState(initial = DashboardStats())
+    } else if (useBackgroundService) {
+        repository!!.dashboardStats.collectAsState(initial = DashboardStats())
     } else {
-        realRepository.getDashboardStats().collectAsState(initial = DashboardStats())
+        fallbackRepository.getDashboardStats().collectAsState(initial = DashboardStats())
     }
     
     val connectionStatus by if (useTestData) {
-        testRepository.connectionStatus.collectAsState()
+        // Convert test repository ConnectionStatus to service ConnectionStatus
+        testRepository.connectionStatus.map { legacyStatus ->
+            when (legacyStatus) {
+                LegacyConnectionStatus.DISCONNECTED -> ConnectionStatus.DISCONNECTED
+                LegacyConnectionStatus.CONNECTING -> ConnectionStatus.CONNECTING 
+                LegacyConnectionStatus.CONNECTED -> ConnectionStatus.CONNECTED
+                LegacyConnectionStatus.ERROR -> ConnectionStatus.ERROR
+            }
+        }.collectAsState(initial = ConnectionStatus.DISCONNECTED)
+    } else if (useBackgroundService) {
+        repository!!.connectionStatus.collectAsState()
     } else {
-        realRepository.connectionStatus.collectAsState()
+        // Convert legacy ConnectionStatus to service ConnectionStatus
+        fallbackRepository.connectionStatus.map { legacyStatus ->
+            when (legacyStatus) {
+                LegacyConnectionStatus.DISCONNECTED -> ConnectionStatus.DISCONNECTED
+                LegacyConnectionStatus.CONNECTING -> ConnectionStatus.CONNECTING 
+                LegacyConnectionStatus.CONNECTED -> ConnectionStatus.CONNECTED
+                LegacyConnectionStatus.ERROR -> ConnectionStatus.ERROR
+            }
+        }.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     }
     
+    // For background service, we don't have isLoading - service is always running
     val isLoading by if (useTestData) {
         testRepository.isLoading.collectAsState()
+    } else if (useBackgroundService) {
+        remember { mutableStateOf(false) }
     } else {
-        realRepository.isLoading.collectAsState()
+        fallbackRepository.isLoading.collectAsState()
     }
     
     // Events are already filtered by the repository based on selectedFilters
@@ -76,48 +110,36 @@ fun DashboardScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        // Connection status indicator
-                        when (connectionStatus) {
-                            ConnectionStatus.CONNECTED -> Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = "Connected to Redis",
-                                modifier = Modifier.size(20.dp),
-                                tint = Color(0xFF4CAF50)
-                            )
-                            ConnectionStatus.CONNECTING -> CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            ConnectionStatus.ERROR -> Icon(
-                                imageVector = Icons.Default.CloudOff,
-                                contentDescription = "Connection Error",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            ConnectionStatus.DISCONNECTED -> Icon(
-                                imageVector = Icons.Default.Cloud,
-                                contentDescription = "Disconnected",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Default.Dashboard,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                    Text(
+                        text = "Claude Hooks Dashboard",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    // Connection status indicator moved to navigation icon position
+                    when (connectionStatus) {
+                        ConnectionStatus.CONNECTED -> Icon(
+                            imageVector = Icons.Default.CloudDone,
+                            contentDescription = "Connected to Redis",
+                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
+                            tint = Color(0xFF4CAF50)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Claude Hooks Dashboard",
-                            fontWeight = FontWeight.Bold
+                        ConnectionStatus.CONNECTING -> CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp).padding(start = 16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        ConnectionStatus.ERROR -> Icon(
+                            imageVector = Icons.Default.CloudOff,
+                            contentDescription = "Connection Error",
+                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        ConnectionStatus.DISCONNECTED -> Icon(
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = "Disconnected",
+                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
@@ -143,7 +165,11 @@ fun DashboardScreen(
                     if (!useTestData && connectionStatus == ConnectionStatus.ERROR) {
                         IconButton(onClick = {
                             scope.launch {
-                                realRepository.reconnect()
+                                if (useBackgroundService) {
+                                    repository!!.reconnect()
+                                } else {
+                                    fallbackRepository.reconnect()
+                                }
                                 snackbarHostState.showSnackbar(
                                     message = "Attempting to reconnect...",
                                     duration = SnackbarDuration.Short
@@ -151,6 +177,17 @@ fun DashboardScreen(
                             }
                         }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Reconnect")
+                        }
+                    }
+                    
+                    // Quit button for background service mode
+                    if (useBackgroundService && onQuitRequested != null) {
+                        IconButton(onClick = onQuitRequested) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = "Quit App",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                     
@@ -195,14 +232,25 @@ fun DashboardScreen(
                                 )
                             } else {
                                 // Clean old events and attempt reconnect if disconnected
-                                realRepository.cleanOldEvents()
-                                if (connectionStatus != ConnectionStatus.CONNECTED) {
-                                    realRepository.reconnect()
+                                if (useBackgroundService) {
+                                    // For background service, just attempt reconnect if needed
+                                    if (connectionStatus != ConnectionStatus.CONNECTED) {
+                                        repository!!.reconnect()
+                                    }
+                                    snackbarHostState.showSnackbar(
+                                        message = "Background service refreshed",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                } else {
+                                    fallbackRepository.cleanOldEvents()
+                                    if (connectionStatus != ConnectionStatus.CONNECTED) {
+                                        fallbackRepository.reconnect()
+                                    }
+                                    snackbarHostState.showSnackbar(
+                                        message = "Dashboard refreshed - showing latest events",
+                                        duration = SnackbarDuration.Short
+                                    )
                                 }
-                                snackbarHostState.showSnackbar(
-                                    message = "Dashboard refreshed - showing latest events",
-                                    duration = SnackbarDuration.Short
-                                )
                             }
                             
                             delay(500) // Give some time for operations
@@ -295,32 +343,69 @@ fun DashboardScreen(
                 }
             }
             
-            // Events List
+            // Events List with Time Grouping
             if (filteredEvents.isEmpty()) {
                 item {
                     EmptyState()
                 }
             } else {
+                val eventGroups = groupEventsByTime(filteredEvents)
+                
+                // Generate all items for LazyColumn
+                val allItems = mutableListOf<Any>()
+                eventGroups.forEach { group ->
+                    allItems.add("header_${group.timeLabel}")
+                    allItems.addAll(group.events)
+                    allItems.add("spacer_${group.timeLabel}")
+                }
+                
                 items(
-                    items = filteredEvents,
-                    key = { event -> event.id }
-                ) { event ->
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + slideInVertically(),
-                        exit = fadeOut() + slideOutVertically()
-                    ) {
-                        HookEventCard(
-                            event = event,
-                            onClick = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = "Event details: ${event.title}",
-                                        duration = SnackbarDuration.Short
-                                    )
+                    items = allItems,
+                    key = { item ->
+                        when (item) {
+                            is String -> item // Headers and spacers
+                            is HookEvent -> item.id
+                            else -> item.hashCode()
+                        }
+                    }
+                ) { item ->
+                    when (item) {
+                        is String -> {
+                            when {
+                                item.startsWith("header_") -> {
+                                    val groupLabel = item.removePrefix("header_")
+                                    val group = eventGroups.find { it.timeLabel == groupLabel }
+                                    if (group != null) {
+                                        TimeGroupHeader(
+                                            label = group.timeLabel,
+                                            eventCount = group.events.size
+                                        )
+                                    }
+                                }
+                                item.startsWith("spacer_") -> {
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
                             }
-                        )
+                        }
+                        is HookEvent -> {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn() + slideInVertically(),
+                                exit = fadeOut() + slideOutVertically()
+                            ) {
+                                HookEventCard(
+                                    event = item,
+                                    onClick = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                message = "Event details: ${item.title}",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -414,5 +499,91 @@ private fun EmptyState() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
+    }
+}
+
+/**
+ * Data class for grouped events with time period headers
+ */
+data class EventGroup(
+    val timeLabel: String,
+    val events: List<HookEvent>
+)
+
+/**
+ * Group events by time periods for better organization
+ */
+private fun groupEventsByTime(events: List<HookEvent>): List<EventGroup> {
+    if (events.isEmpty()) return emptyList()
+    
+    val now = Instant.now()
+    val groups = mutableListOf<EventGroup>()
+    
+    // Group events by time periods
+    val justNow = mutableListOf<HookEvent>()
+    val lastHour = mutableListOf<HookEvent>()
+    val today = mutableListOf<HookEvent>()
+    val yesterday = mutableListOf<HookEvent>()
+    val thisWeek = mutableListOf<HookEvent>()
+    val older = mutableListOf<HookEvent>()
+    
+    for (event in events) {
+        val secondsAgo = ChronoUnit.SECONDS.between(event.timestamp, now)
+        val hoursAgo = ChronoUnit.HOURS.between(event.timestamp, now)
+        val daysAgo = ChronoUnit.DAYS.between(event.timestamp, now)
+        
+        when {
+            secondsAgo < 300 -> justNow.add(event) // Last 5 minutes
+            secondsAgo < 3600 -> lastHour.add(event) // Last hour
+            daysAgo == 0L -> today.add(event) // Today
+            daysAgo == 1L -> yesterday.add(event) // Yesterday
+            daysAgo <= 7 -> thisWeek.add(event) // This week
+            else -> older.add(event) // Older
+        }
+    }
+    
+    // Add non-empty groups
+    if (justNow.isNotEmpty()) groups.add(EventGroup("Just now", justNow))
+    if (lastHour.isNotEmpty()) groups.add(EventGroup("Last hour", lastHour))
+    if (today.isNotEmpty()) groups.add(EventGroup("Earlier today", today))
+    if (yesterday.isNotEmpty()) groups.add(EventGroup("Yesterday", yesterday))
+    if (thisWeek.isNotEmpty()) groups.add(EventGroup("This week", thisWeek))
+    if (older.isNotEmpty()) groups.add(EventGroup("Older", older))
+    
+    return groups
+}
+
+/**
+ * Time group header composable
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeGroupHeader(
+    label: String,
+    eventCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Badge(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        ) {
+            Text(
+                text = eventCount.toString(),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
     }
 }
