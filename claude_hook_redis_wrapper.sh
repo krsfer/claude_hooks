@@ -9,6 +9,11 @@ set -euo pipefail
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Source Redis configuration
+if [[ -f ~/.claude/redis_config.env ]]; then
+    source ~/.claude/redis_config.env
+fi
+
 # Validate arguments
 if [[ $# -lt 2 ]]; then
     echo "Error: Missing required arguments" >&2

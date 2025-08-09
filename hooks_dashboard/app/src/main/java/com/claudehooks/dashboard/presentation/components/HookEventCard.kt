@@ -10,6 +10,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
 import com.claudehooks.dashboard.data.model.Severity
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -34,6 +40,14 @@ fun HookEventCard(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var currentTime by remember { mutableStateOf(Instant.now()) }
+    
+    LaunchedEffect(event.timestamp) {
+        while (true) {
+            delay(1000L) // Update every second
+            currentTime = Instant.now()
+        }
+    }
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -122,7 +136,7 @@ fun HookEventCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = formatRelativeTime(event.timestamp),
+                            text = formatDurationAge(event.timestamp, currentTime),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -212,18 +226,26 @@ private fun getTypeColor(type: HookType): Color = when (type) {
     HookType.CUSTOM -> Color(0xFF607D8B)
 }
 
-private fun formatRelativeTime(timestamp: Instant): String {
-    val now = Instant.now()
-    val minutes = ChronoUnit.MINUTES.between(timestamp, now)
+private fun formatDurationAge(timestamp: Instant, currentTime: Instant): String {
+    // Format the execution datetime
+    val formatter = DateTimeFormatter.ofPattern("dd HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
+    val executionTime = formatter.format(timestamp)
     
-    return when {
-        minutes < 1 -> "Just now"
-        minutes < 60 -> "$minutes min ago"
-        minutes < 1440 -> "${minutes / 60} hours ago"
-        else -> {
-            val formatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm")
-                .withZone(ZoneId.systemDefault())
-            formatter.format(timestamp)
-        }
-    }
+    // Calculate duration
+    val totalSeconds = ChronoUnit.SECONDS.between(timestamp, currentTime)
+    
+    val days = (totalSeconds / 86400).toInt()
+    val hours = ((totalSeconds % 86400) / 3600).toInt()
+    val minutes = ((totalSeconds % 3600) / 60).toInt()
+    val seconds = (totalSeconds % 60).toInt()
+    
+    val daysStr = if (days == 0) "  " else String.format("%02d", days)
+    val hoursStr = if (hours == 0 && days == 0) "  " else String.format("%02d", hours)
+    val minutesStr = if (minutes == 0 && hours == 0 && days == 0) "  " else String.format("%02d", minutes)
+    val secondsStr = if (seconds == 0 && minutes == 0 && hours == 0 && days == 0) "  " else String.format("%02d", seconds)
+    
+    val duration = "$daysStr $hoursStr:$minutesStr:$secondsStr"
+    
+    return "$executionTime $duration ago"
 }

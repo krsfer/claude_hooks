@@ -50,7 +50,26 @@ data class PayloadData(
     val name: String? = null,
     val tool: String? = null,
     val command: String? = null,
-    val action: String? = null
+    val action: String? = null,
+    // Tool-specific parameters that can help identify the tool type
+    val file_path: String? = null,
+    val content: String? = null,
+    val old_string: String? = null,
+    val pattern: String? = null,
+    val path: String? = null,
+    val url: String? = null,
+    val query: String? = null,
+    // Additional fields from logs
+    val prompt_preview: String? = null,
+    val prompt_length: Int? = null,
+    val success: Boolean? = null,
+    val execution_time_ms: Long? = null,
+    val output_length: Int? = null,
+    val session_ended: Boolean? = null,
+    val total_duration_ms: Long? = null,
+    val total_tokens: Int? = null,
+    val tools_used: Int? = null,
+    val reason: String? = null
 )
 
 @Serializable

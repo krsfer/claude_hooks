@@ -46,12 +46,17 @@ object HookDataMapper {
             "pre_tool_use" -> {
                 val toolName = extractToolName(redisData.payload)
                 Timber.d("pre_tool_use - extracted tool name: '$toolName'")
-                "Tool Use: $toolName"
+                if (toolName == "Unknown") "Tool Use" else "Tool Use: $toolName"
             }
             "post_tool_use" -> {
                 val toolName = extractToolName(redisData.payload)
                 Timber.d("post_tool_use - extracted tool name: '$toolName'")
-                "Tool Completed: $toolName"
+                val payloadExecTime = redisData.payload.execution_time_ms
+                val coreExecTime = redisData.core.execution_time_ms
+                // Use core execution time if payload is null or 0, otherwise use payload
+                val execTime = if (payloadExecTime != null && payloadExecTime > 0) payloadExecTime else coreExecTime
+                Timber.d("post_tool_use - execution times - payload: $payloadExecTime, core: $coreExecTime, final: $execTime")
+                if (toolName == "Unknown") "Tool Completed (${execTime}ms)" else "Tool Completed: $toolName (${execTime}ms)"
             }
             "notification" -> "Notification: ${redisData.payload.notification_type ?: "System"}"
             "stop_hook" -> "Session Stopped"
@@ -67,10 +72,30 @@ object HookDataMapper {
     private fun generateMessage(redisData: RedisHookData): String {
         return when (redisData.hook_type) {
             "session_start" -> "Claude Code session initiated"
-            "user_prompt_submit" -> redisData.payload.prompt?.take(100) + 
-                if ((redisData.payload.prompt?.length ?: 0) > 100) "..." else ""
-            "pre_tool_use" -> "Preparing to execute ${redisData.payload.tool_name}"
-            "post_tool_use" -> "Tool execution completed in ${redisData.core.execution_time_ms}ms"
+            "user_prompt_submit" -> {
+                val prompt = redisData.payload.prompt
+                val promptPreview = redisData.payload.prompt_preview
+                
+                when {
+                    !prompt.isNullOrEmpty() -> prompt.take(100) + if (prompt.length > 100) "..." else ""
+                    !promptPreview.isNullOrEmpty() && promptPreview != "..." -> 
+                        promptPreview.take(100) + if (promptPreview.length > 100) "..." else ""
+                    else -> "User submitted prompt"
+                }
+            }
+            "pre_tool_use" -> {
+                val toolName = extractToolName(redisData.payload)
+                if (toolName == "Unknown") "Preparing to execute tool" else "Preparing to execute $toolName"
+            }
+            "post_tool_use" -> {
+                val payloadExecTime = redisData.payload.execution_time_ms
+                val coreExecTime = redisData.core.execution_time_ms
+                val execTime = if (payloadExecTime != null && payloadExecTime > 0) payloadExecTime else coreExecTime
+                val success = redisData.payload.success ?: true
+                val status = if (success) "completed" else "failed"
+                
+                "Tool execution $status in ${execTime}ms"
+            }
             "notification" -> redisData.payload.message ?: "System notification"
             "stop_hook" -> "Session terminated"
             "sub_agent_stop_hook" -> "Sub-agent task completed"
@@ -80,13 +105,22 @@ object HookDataMapper {
     }
     
     private fun extractToolName(payload: PayloadData): String {
-        // If tool_name is "unknown", try to extract from other sources
+        // If tool_name is "unknown" or "Unknown", try to extract from other sources
         val toolName = when {
-            payload.tool_name != null && payload.tool_name != "unknown" -> payload.tool_name
+            payload.tool_name != null && 
+            payload.tool_name.lowercase() !in listOf("unknown", "null") -> payload.tool_name
             payload.name != null -> payload.name
             payload.tool != null -> payload.tool
-            payload.command != null -> payload.command
+            payload.command != null -> "Bash"
             payload.action != null -> payload.action
+            // Try direct field extraction first
+            payload.file_path != null && payload.content != null -> "Write"
+            payload.file_path != null && payload.old_string != null -> "Edit"
+            payload.file_path != null -> "Read"
+            payload.pattern != null -> "Grep"
+            payload.path != null -> "LS"
+            payload.url != null -> "WebFetch"
+            payload.query != null -> "WebSearch"
             else -> extractToolFromInput(payload.tool_input) 
                 ?: extractToolFromInput(payload.tool_input_preview)
                 ?: inferToolFromContext(payload)
@@ -150,8 +184,8 @@ object HookDataMapper {
     private fun generateSource(redisData: RedisHookData): String {
         return when {
             extractToolName(redisData.payload) != "Unknown" -> "Tool: ${extractToolName(redisData.payload)}"
-            redisData.context.git_branch != null -> "Git: ${redisData.context.git_branch}"
-            redisData.context.platform != null -> "Platform: ${redisData.context.platform}"
+            !redisData.context.git_branch.isNullOrEmpty() -> "Git: ${redisData.context.git_branch}"
+            !redisData.context.platform.isNullOrEmpty() -> "Platform: ${redisData.context.platform}"
             else -> "Claude Code"
         }
     }

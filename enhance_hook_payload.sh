@@ -25,9 +25,33 @@ process_payload() {
             # Extract existing tool name
             local tool_name=$(echo "$raw_payload" | jq -r '.tool_name // "unknown"' 2>/dev/null)
             
-            # If tool_name is unknown, try to infer it
+            # If tool_name is unknown, try to infer it from available data
             if [[ "$tool_name" == "unknown" || "$tool_name" == "null" ]]; then
-                # Try to get tool_input
+                # Since Claude Code doesn't send tool_input in hooks, 
+                # we'll use other available information to make educated guesses
+                
+                # Check for execution characteristics in post_tool_use
+                if [[ "$hook_type" == "post_tool_use" ]]; then
+                    local output_length=$(echo "$raw_payload" | jq -r '.output_length // 0' 2>/dev/null)
+                    local execution_time=$(echo "$raw_payload" | jq -r '.execution_time_ms // 0' 2>/dev/null)
+                    local success=$(echo "$raw_payload" | jq -r '.success // false' 2>/dev/null)
+                    
+                    # Make educated guesses based on output characteristics
+                    if [[ "$output_length" -gt 1000 ]]; then
+                        tool_name="Read" # Likely a file read with lots of output
+                    elif [[ "$output_length" -gt 0 && "$execution_time" -lt 100 ]]; then
+                        tool_name="LS" # Fast operation with some output
+                    elif [[ "$execution_time" -gt 1000 ]]; then
+                        tool_name="Bash" # Slower operation, likely a command
+                    else
+                        tool_name="Tool" # Generic fallback
+                    fi
+                else
+                    # For pre_tool_use, we don't have execution data
+                    tool_name="Tool" # Generic fallback
+                fi
+                
+                # Try to get tool_input (though it likely won't be there)
                 local tool_input=$(echo "$raw_payload" | jq -r '.tool_input // "{}"' 2>/dev/null)
                 
                 # Infer tool name from tool_input patterns
@@ -70,18 +94,36 @@ process_payload() {
                 enhanced_payload=$(echo "$raw_payload" | jq --arg tn "$tool_name" '.tool_name = $tn' 2>/dev/null || echo "$raw_payload")
             fi
             
-            # Ensure tool_input_preview is set
-            local tool_input_preview=$(echo "$enhanced_payload" | jq -r '.tool_input // "{}" | tostring | .[0:100]' 2>/dev/null || echo "...")
-            enhanced_payload=$(echo "$enhanced_payload" | jq --arg tip "$tool_input_preview" '.tool_input_preview = $tip' 2>/dev/null || echo "$enhanced_payload")
+            # Convert tool_input to string and set tool_input_preview
+            local tool_input_str=$(echo "$enhanced_payload" | jq -r '.tool_input // "{}" | tostring' 2>/dev/null || echo "{}")
+            local tool_input_preview=$(echo "$tool_input_str" | head -c 100)
+            enhanced_payload=$(echo "$enhanced_payload" | jq \
+                --arg ti "$tool_input_str" \
+                --arg tip "$tool_input_preview" \
+                '.tool_input = $ti | .tool_input_preview = $tip' 2>/dev/null || echo "$enhanced_payload")
             ;;
             
         "user_prompt_submit")
-            # Ensure prompt field exists
-            local prompt=$(echo "$raw_payload" | jq -r '.prompt // .message // .text // ""' 2>/dev/null)
-            if [[ -z "$prompt" || "$prompt" == "null" ]]; then
-                prompt="User prompt not captured"
+            # Handle both JSON and plain text payloads
+            local prompt=""
+            
+            # Try to parse as JSON first
+            if command -v jq >/dev/null 2>&1 && echo "$raw_payload" | jq empty 2>/dev/null; then
+                # It's valid JSON, extract prompt field
+                prompt=$(echo "$raw_payload" | jq -r '.prompt // .message // .text // ""' 2>/dev/null)
+                if [[ -z "$prompt" || "$prompt" == "null" ]]; then
+                    prompt="User prompt not captured"
+                fi
+                enhanced_payload=$(echo "$raw_payload" | jq --arg p "$prompt" '.prompt = $p' 2>/dev/null || echo "$raw_payload")
+            else
+                # It's plain text, treat the entire payload as the prompt
+                prompt="$raw_payload"
+                if [[ -z "$prompt" ]]; then
+                    prompt="User prompt not captured"
+                fi
+                # Create JSON structure with the plain text as prompt
+                enhanced_payload=$(jq -n --arg p "$prompt" '{prompt: $p}' 2>/dev/null || echo "{\"prompt\": \"$prompt\"}")
             fi
-            enhanced_payload=$(echo "$raw_payload" | jq --arg p "$prompt" '.prompt = $p' 2>/dev/null || echo "$raw_payload")
             ;;
             
         "notification")

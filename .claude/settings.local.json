@@ -40,7 +40,17 @@
       "Bash(claude --version)",
       "Bash(claude --debug)",
       "Bash(cp:*)",
-      "Bash(adb shell am start:*)"
+      "Bash(adb shell am start:*)",
+      "Bash(./deploy_hook_fix.sh)",
+      "Bash(./verify_deployment.sh)",
+      "Bash(./test_new_session_hooks.sh:*)",
+      "Bash(rm:*)",
+      "Bash(pgrep:*)",
+      "Bash(DEBUG=1 ./claude_hook_redis.sh test_simple sess-test)",
+      "Bash(adb install:*)",
+      "Bash(adb shell am force-stop:*)",
+      "Bash(adb:*)",
+      "Bash(./test_system_notification.sh:*)"
     ],
     "deny": []
   }

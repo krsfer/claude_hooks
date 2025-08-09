@@ -13,6 +13,7 @@ object NotificationChannels {
     const val CRITICAL_CHANNEL_ID = "critical_notifications"
     const val TOOL_CHANNEL_ID = "tool_notifications"
     const val GENERAL_CHANNEL_ID = "general_notifications"
+    const val CLAUDEHOOK_CHANNEL_ID = "claudehook"
     
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -64,12 +65,34 @@ object NotificationChannels {
                 enableVibration(false)
             }
             
+            // ClaudeHook notifications channel (urgent priority for system notifications)
+            val claudehookChannel = NotificationChannel(
+                CLAUDEHOOK_CHANNEL_ID,
+                "Claude Hook System",
+                NotificationManager.IMPORTANCE_MAX
+            ).apply {
+                description = "System notifications from Claude Code hooks"
+                enableLights(true)
+                lightColor = android.graphics.Color.RED
+                enableVibration(true)
+                // Strong vibration pattern for smartwatch
+                // Pattern: wait 0ms, vibrate 1000ms, pause 500ms, vibrate 500ms, pause 500ms, vibrate 500ms
+                vibrationPattern = longArrayOf(0, 1000, 500, 500, 500, 500)
+                setShowBadge(true)
+                // Bypass DND for critical system notifications
+                setBypassDnd(true)
+                // Allow sound with screen on
+                shouldVibrate()
+                shouldShowLights()
+            }
+            
             // Create all channels
             notificationManager.createNotificationChannels(listOf(
                 systemChannel,
                 criticalChannel,
                 toolChannel,
-                generalChannel
+                generalChannel,
+                claudehookChannel
             ))
         }
     }

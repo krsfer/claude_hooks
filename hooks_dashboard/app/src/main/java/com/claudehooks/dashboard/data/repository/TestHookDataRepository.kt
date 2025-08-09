@@ -41,7 +41,7 @@ class TestHookDataRepository(private val context: Context? = null) {
     private val maxEvents = 100
     
     init {
-        startSimulation()
+        // startSimulation() // Disabled test simulation - using real Redis data instead
     }
     
     private fun startSimulation() {
@@ -63,16 +63,16 @@ class TestHookDataRepository(private val context: Context? = null) {
             createEvent(HookType.SESSION_START, "Session Started", "Claude Code session initiated", now.minus(30, ChronoUnit.MINUTES), "sess-test-001"),
             createEvent(HookType.USER_PROMPT_SUBMIT, "User Prompt", "Use real data in Claude Hooks Dashboard app", now.minus(25, ChronoUnit.MINUTES), "sess-test-001"),
             createEvent(HookType.PRE_TOOL_USE, "Tool Use: LS", "Preparing to execute LS", now.minus(24, ChronoUnit.MINUTES), "sess-test-001"),
-            createEvent(HookType.POST_TOOL_USE, "Tool Completed: LS", "Tool execution completed in 120ms", now.minus(23, ChronoUnit.MINUTES), "sess-test-001"),
+            createEvent(HookType.POST_TOOL_USE, "Tool Completed: LS (120ms)", "Tool execution completed in 120ms", now.minus(23, ChronoUnit.MINUTES), "sess-test-001"),
             createEvent(HookType.PRE_TOOL_USE, "Tool Use: Read", "Preparing to execute Read", now.minus(22, ChronoUnit.MINUTES), "sess-test-001"),
-            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Read", "Tool execution completed in 85ms", now.minus(21, ChronoUnit.MINUTES), "sess-test-001"),
+            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Read (85ms)", "Tool execution completed in 85ms", now.minus(21, ChronoUnit.MINUTES), "sess-test-001"),
             createEvent(HookType.PRE_TOOL_USE, "Tool Use: Edit", "Preparing to execute Edit", now.minus(20, ChronoUnit.MINUTES), "sess-test-001"),
-            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Edit", "Tool execution completed in 45ms", now.minus(19, ChronoUnit.MINUTES), "sess-test-001"),
+            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Edit (45ms)", "Tool execution completed in 45ms", now.minus(19, ChronoUnit.MINUTES), "sess-test-001"),
             createEvent(HookType.NOTIFICATION, "Notification: Success", "Redis integration completed successfully", now.minus(18, ChronoUnit.MINUTES), "sess-test-001", Severity.INFO),
             createEvent(HookType.SESSION_START, "Session Started", "New Claude Code session initiated", now.minus(10, ChronoUnit.MINUTES), "sess-test-002"),
             createEvent(HookType.USER_PROMPT_SUBMIT, "User Prompt", "Test the real-time data flow", now.minus(9, ChronoUnit.MINUTES), "sess-test-002"),
             createEvent(HookType.PRE_TOOL_USE, "Tool Use: Bash", "Preparing to execute Bash", now.minus(8, ChronoUnit.MINUTES), "sess-test-002"),
-            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Bash", "Tool execution completed in 2340ms", now.minus(7, ChronoUnit.MINUTES), "sess-test-002", Severity.WARNING),
+            createEvent(HookType.POST_TOOL_USE, "Tool Completed: Bash (2340ms)", "Tool execution completed in 2340ms", now.minus(7, ChronoUnit.MINUTES), "sess-test-002", Severity.WARNING),
         )
         
         initialEvents.forEach { addEvent(it) }
@@ -82,10 +82,12 @@ class TestHookDataRepository(private val context: Context? = null) {
         val now = Instant.now()
         val sessionId = listOf("sess-test-001", "sess-test-002", "sess-test-003").random()
         
+        val randomTool = getRandomTool()
+        val execTime = Random.nextInt(50, 3000)
         val events = listOf(
             { createEvent(HookType.USER_PROMPT_SUBMIT, "User Prompt", "Random user query: ${getRandomPrompt()}", now, sessionId) },
-            { createEvent(HookType.PRE_TOOL_USE, "Tool Use: ${getRandomTool()}", "Preparing to execute ${getRandomTool()}", now, sessionId) },
-            { createEvent(HookType.POST_TOOL_USE, "Tool Completed: ${getRandomTool()}", "Tool execution completed in ${Random.nextInt(50, 3000)}ms", now, sessionId, 
+            { createEvent(HookType.PRE_TOOL_USE, "Tool Use: $randomTool", "Preparing to execute $randomTool", now, sessionId) },
+            { createEvent(HookType.POST_TOOL_USE, "Tool Completed: $randomTool (${execTime}ms)", "Tool execution completed in ${execTime}ms", now, sessionId, 
                 if (Random.nextFloat() < 0.1) Severity.WARNING else Severity.INFO) },
             { createEvent(HookType.NOTIFICATION, "Notification: ${getRandomNotification()}", getRandomNotificationMessage(), now, sessionId) }
         )

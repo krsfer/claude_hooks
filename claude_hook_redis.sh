@@ -6,11 +6,16 @@
 
 set -euo pipefail
 
+# Source Redis configuration
+if [[ -f ~/.claude/redis_config.env ]]; then
+    source ~/.claude/redis_config.env
+fi
+
 # Configuration
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_VERSION="1.0.0"
 readonly REDIS_CHANNEL="hooksdata"
-readonly LOG_FILE="${CLAUDE_HOOKS_LOG:-/tmp/claude_hooks.log}"
+readonly LOG_FILE="${CLAUDE_HOOKS_LOG:-$HOME/.claude/logs/hooks.log}"
 readonly SEQUENCE_FILE="${CLAUDE_HOOKS_SEQ:-/tmp/.claude_hooks_seq}"
 
 # Exit codes
@@ -53,6 +58,32 @@ log_debug() {
     fi
 }
 
+# Log full payload for debugging
+log_payload() {
+    local hook_type="$1"
+    local session_id="$2"
+    local payload="$3"
+    
+    # Create logs directory if it doesn't exist
+    mkdir -p "$(dirname "$LOG_FILE")"
+    
+    local timestamp=$(TZ='Europe/Paris' date '+%Y-%m-%dT%H:%M:%S.%3N%z' 2>/dev/null || TZ='Europe/Paris' date '+%Y-%m-%dT%H:%M:%S%z')
+    
+    # Log the full payload
+    {
+        echo "=== HOOK PAYLOAD ==="
+        echo "[$timestamp] Type: $hook_type | Session: $session_id"
+        echo "--- Raw Payload ---"
+        echo "$payload"
+        if command -v jq >/dev/null 2>&1; then
+            echo "--- Formatted Payload ---"
+            echo "$payload" | jq '.' 2>/dev/null || echo "$payload"
+        fi
+        echo "=================="
+        echo ""
+    } >> "$LOG_FILE" 2>/dev/null
+}
+
 # Cleanup function
 cleanup() {
     local exit_code=$?
@@ -87,7 +118,7 @@ Environment Variables:
   REDIS_PASSWORD          Redis password (required)
   REDIS_PORT              Redis port (default: 6380)
   REDIS_TLS               Use TLS connection (default: true)
-  CLAUDE_HOOKS_LOG        Log file path (default: /tmp/claude_hooks.log)
+  CLAUDE_HOOKS_LOG        Log file path (default: ~/.claude/logs/hooks.log)
   CLAUDE_HOOKS_SEQ        Sequence file path (default: /tmp/.claude_hooks_seq)
   DEBUG                   Enable debug mode (0 or 1)
 
@@ -356,6 +387,70 @@ build_json_payload() {
         exec_time_ms=$(( (end_time - start_time) / 1000000 ))
     fi
     
+    # Extract tool name from the environment or payload
+    local extracted_tool_name="unknown"
+    
+    # Try to get tool name from Claude Code environment variables
+    if [[ -n "${CLAUDE_TOOL_NAME:-}" ]]; then
+        extracted_tool_name="$CLAUDE_TOOL_NAME"
+    elif [[ -n "${CLAUDE_HOOK_MATCHER:-}" ]]; then
+        # Extract tool name from Claude hook matcher (e.g., "BashTool" -> "Bash")
+        extracted_tool_name="${CLAUDE_HOOK_MATCHER//Tool/}"
+    else
+        # Try to extract from payload using multiple methods
+        if command -v jq >/dev/null 2>&1; then
+            # First try explicit tool_name field
+            local payload_tool_name=$(echo "$payload_json" | jq -r '.tool_name // "unknown"' 2>/dev/null)
+            if [[ "$payload_tool_name" != "unknown" && "$payload_tool_name" != "null" ]]; then
+                extracted_tool_name="$payload_tool_name"
+            else
+                # Try to infer from tool input patterns
+                local command_field=$(echo "$payload_json" | jq -r '.command // empty' 2>/dev/null)
+                local file_path_field=$(echo "$payload_json" | jq -r '.file_path // empty' 2>/dev/null)
+                local pattern_field=$(echo "$payload_json" | jq -r '.pattern // empty' 2>/dev/null)
+                local path_field=$(echo "$payload_json" | jq -r '.path // empty' 2>/dev/null)
+                local url_field=$(echo "$payload_json" | jq -r '.url // empty' 2>/dev/null)
+                local query_field=$(echo "$payload_json" | jq -r '.query // empty' 2>/dev/null)
+                local content_field=$(echo "$payload_json" | jq -r '.content // empty' 2>/dev/null)
+                local old_string_field=$(echo "$payload_json" | jq -r '.old_string // empty' 2>/dev/null)
+                
+                # Infer tool name from payload structure
+                if [[ -n "$command_field" ]]; then
+                    extracted_tool_name="Bash"
+                elif [[ -n "$file_path_field" && -n "$content_field" ]]; then
+                    extracted_tool_name="Write"
+                elif [[ -n "$file_path_field" && -n "$old_string_field" ]]; then
+                    extracted_tool_name="Edit"
+                elif [[ -n "$file_path_field" ]]; then
+                    extracted_tool_name="Read"
+                elif [[ -n "$pattern_field" ]]; then
+                    extracted_tool_name="Grep"
+                elif [[ -n "$path_field" ]]; then
+                    extracted_tool_name="LS"
+                elif [[ -n "$url_field" ]]; then
+                    extracted_tool_name="WebFetch"
+                elif [[ -n "$query_field" ]]; then
+                    extracted_tool_name="WebSearch"
+                else
+                    # Try to extract from nested structure
+                    local nested_tool=$(echo "$payload_json" | jq -r '.tool_input.command // .tool_input.file_path // .tool_input.pattern // .tool_input.path // empty' 2>/dev/null)
+                    if [[ -n "$nested_tool" ]]; then
+                        if echo "$nested_tool" | grep -q '^/'; then
+                            extracted_tool_name="LS"
+                        elif echo "$nested_tool" | grep -qE '^[a-zA-Z_]+$'; then
+                            extracted_tool_name="Bash"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+    fi
+    
+    # Update payload with extracted tool name if it's a tool use hook
+    if [[ "$hook_type" == "pre_tool_use" || "$hook_type" == "post_tool_use" ]] && command -v jq >/dev/null 2>&1; then
+        payload_json=$(echo "$payload_json" | jq --arg tn "$extracted_tool_name" '.tool_name = $tn' 2>/dev/null || echo "$payload_json")
+    fi
+
     # Build the complete JSON
     local json_output=$(cat <<EOF
 {
@@ -395,14 +490,14 @@ send_to_redis() {
     # Build Redis command with proper TLS support
     local redis_cmd
     if [[ "$(echo "${REDIS_TLS}" | tr '[:upper:]' '[:lower:]')" == "true" || "${REDIS_TLS}" == "1" ]]; then
-        # Use the same TLS configuration as your redis-tls alias
-        local cert_dir="$HOME/.redis/certs"
-        if [[ -f "$cert_dir/redis-server.crt" && -f "$cert_dir/redis-server.key" && -f "$cert_dir/ca.crt" ]]; then
-            # Use certificates like your redis-tls alias
+        # Use certificates from environment variables if available
+        if [[ -n "${REDIS_CERT_PATH:-}" && -n "${REDIS_KEY_PATH:-}" && -n "${REDIS_CA_PATH:-}" && 
+              -f "${REDIS_CERT_PATH}" && -f "${REDIS_KEY_PATH}" && -f "${REDIS_CA_PATH}" ]]; then
+            # Use certificates from environment variables
             redis_cmd=(redis-cli --tls 
-                      --cert "$cert_dir/redis-server.crt" 
-                      --key "$cert_dir/redis-server.key" 
-                      --cacert "$cert_dir/ca.crt"
+                      --cert "$REDIS_CERT_PATH" 
+                      --key "$REDIS_KEY_PATH" 
+                      --cacert "$REDIS_CA_PATH"
                       -p "$redis_port" 
                       -h "$redis_host" 
                       --pass "$redis_pass")
@@ -523,12 +618,18 @@ main() {
         hook_payload="{}"
     fi
     
+    # Log the raw payload to ~/.claude/logs/hooks.log
+    log_payload "$hook_type" "$session_id" "$hook_payload"
+    
     # Get sequence number
     local sequence=$(get_sequence_number "$session_id")
     log_debug "Sequence number: $sequence"
     
     # Build JSON payload
     local json_payload=$(build_json_payload "$hook_type" "$session_id" "$hook_payload" "$sequence")
+    
+    # Log the final JSON payload that will be sent to Redis
+    log_payload "${hook_type}_final" "$session_id" "$json_payload"
     
     if [[ "${DEBUG:-0}" == "1" ]]; then
         log_debug "JSON payload:"

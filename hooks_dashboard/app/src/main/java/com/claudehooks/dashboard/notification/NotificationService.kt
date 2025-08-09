@@ -3,6 +3,9 @@ package com.claudehooks.dashboard.notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.claudehooks.dashboard.R
@@ -33,8 +36,21 @@ class NotificationService(private val context: Context) {
             return
         }
         
+        // Check if this is a system notification
+        val isSystemNotification = isSystemNotification(event)
+        
         try {
-            val channelId = NotificationChannels.getChannelIdForSeverity(event.severity)
+            // For system notifications, use the claudehook channel and show toast
+            val channelId = if (isSystemNotification) {
+                NotificationChannels.CLAUDEHOOK_CHANNEL_ID
+            } else {
+                NotificationChannels.getChannelIdForSeverity(event.severity)
+            }
+            
+            // Show toast for system notifications
+            if (isSystemNotification) {
+                showToastForSystemNotification(event)
+            }
             
             // Check if notifications are enabled for this channel
             if (!NotificationChannels.isNotificationChannelEnabled(context, channelId)) {
@@ -42,19 +58,65 @@ class NotificationService(private val context: Context) {
                 return
             }
             
-            val notification = createNotification(event, channelId)
+            val notification = createNotification(event, channelId, isSystemNotification)
             val notificationId = generateNotificationId(event)
+            
+            // Check if we have notification permission (API 33+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    Timber.w("POST_NOTIFICATIONS permission not granted")
+                    return
+                }
+            }
             
             notificationManager.notify(notificationId, notification)
             
-            Timber.d("Notification shown for ${event.type}: ${event.title}")
+            val notificationType = if (isSystemNotification) "system" else "regular"
+            Timber.d("$notificationType notification shown for ${event.type}: ${event.title}")
             
         } catch (e: Exception) {
             Timber.e(e, "Failed to show notification for event: ${event.id}")
         }
     }
     
-    private fun createNotification(event: HookEvent, channelId: String): android.app.Notification {
+    private fun isSystemNotification(event: HookEvent): Boolean {
+        // Detect system notifications based on title or message content
+        val systemKeywords = listOf(
+            "system notification",
+            "system alert", 
+            "system event",
+            "claude code",
+            "hook system"
+        )
+        
+        val titleLower = event.title.lowercase()
+        val messageLower = event.message.lowercase()
+        
+        return systemKeywords.any { keyword ->
+            titleLower.contains(keyword) || messageLower.contains(keyword)
+        } || event.source.lowercase().contains("system")
+    }
+    
+    private fun showToastForSystemNotification(event: HookEvent) {
+        try {
+            val toastMessage = "System: ${event.title}"
+            
+            // Ensure toast is shown on the main thread
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show()
+            }
+            
+            Timber.d("Toast shown for system notification: ${event.title}")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to show toast for system notification")
+        }
+    }
+    
+    private fun createNotification(event: HookEvent, channelId: String, isSystemNotification: Boolean = false): android.app.Notification {
         // Create intent to open the app when notification is tapped
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -74,16 +136,42 @@ class NotificationService(private val context: Context) {
         val timeString = event.timestamp.atZone(java.time.ZoneId.systemDefault()).format(timeFormatter)
         
         // Create notification content
+        val title = if (isSystemNotification) "🔔 ${event.title}" else event.title
+        val priority = if (isSystemNotification) NotificationCompat.PRIORITY_MAX else getNotificationPriority(event.severity)
+        
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(getNotificationIcon(event.severity))
-            .setContentTitle(event.title)
+            .setContentTitle(title)
             .setContentText(event.message)
             .setSubText("$timeString • ${event.source}")
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setPriority(getNotificationPriority(event.severity))
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setPriority(priority)
+            .setCategory(if (isSystemNotification) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_EVENT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            
+        // Add vibration and wearable support for system notifications
+        if (isSystemNotification) {
+            // Custom vibration pattern for immediate attention
+            // Pattern: wait 0ms, vibrate 800ms, pause 250ms, vibrate 300ms, pause 250ms, vibrate 300ms
+            val vibrationPattern = longArrayOf(0, 800, 250, 300, 250, 300)
+            builder.setVibrate(vibrationPattern)
+            
+            // Ensure notification mirrors to wearables
+            builder.setLocalOnly(false)
+            
+            // Use ALL defaults to ensure maximum compatibility
+            builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            
+            // Set as alert-type notification for wearables
+            builder.setOnlyAlertOnce(false)
+            
+            // Add group to ensure it appears on wearables
+            builder.setGroup("claude_system_alerts")
+            
+            // Set timeout so notification doesn't persist forever
+            builder.setTimeoutAfter(30000) // 30 seconds
+        }
         
         // Add expanded style for longer messages
         if (event.message.length > 50) {
@@ -103,8 +191,9 @@ class NotificationService(private val context: Context) {
             )
         }
         
-        // Add color based on severity
-        builder.color = getNotificationColor(event.severity)
+        // Add color based on severity or system notification
+        val color = if (isSystemNotification) 0xFF4CAF50.toInt() else getNotificationColor(event.severity) // Green for system notifications
+        builder.color = color
         
         return builder.build()
     }
