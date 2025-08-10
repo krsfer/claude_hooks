@@ -61,18 +61,37 @@ fun HookEventCard(
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = when (event.severity) {
+                Severity.CRITICAL -> 8.dp
+                Severity.ERROR -> 4.dp
+                Severity.WARNING -> 2.dp
+                else -> 1.dp
+            }
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(
+                    when (event.severity) {
+                        Severity.CRITICAL -> 16.dp
+                        Severity.ERROR -> 14.dp
+                        else -> 12.dp
+                    }
+                ),
             verticalAlignment = Alignment.Top
         ) {
-            // Icon
+            // Icon with severity-based sizing
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(
+                        when (event.severity) {
+                            Severity.CRITICAL -> 48.dp
+                            Severity.ERROR -> 44.dp
+                            else -> 40.dp
+                        }
+                    )
                     .clip(CircleShape)
                     .background(getTypeColor(event.type).copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
@@ -81,7 +100,13 @@ fun HookEventCard(
                     imageVector = getTypeIcon(event.type),
                     contentDescription = null,
                     tint = getTypeColor(event.type),
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(
+                        when (event.severity) {
+                            Severity.CRITICAL -> 28.dp
+                            Severity.ERROR -> 24.dp
+                            else -> 20.dp
+                        }
+                    )
                 )
             }
             
@@ -99,10 +124,21 @@ fun HookEventCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = event.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            style = when (event.severity) {
+                                Severity.CRITICAL -> MaterialTheme.typography.titleMedium
+                                else -> MaterialTheme.typography.titleSmall
+                            },
+                            fontWeight = when (event.severity) {
+                                Severity.CRITICAL -> FontWeight.Bold
+                                else -> FontWeight.SemiBold
+                            },
+                            maxLines = if (event.severity == Severity.CRITICAL) 2 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (event.severity == Severity.CRITICAL) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(

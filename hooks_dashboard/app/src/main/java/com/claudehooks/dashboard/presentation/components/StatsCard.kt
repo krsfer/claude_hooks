@@ -17,12 +17,15 @@ fun StatsCard(
     subtitle: String? = null,
     cardColor: Color = MaterialTheme.colorScheme.surface,
     valueColor: Color = MaterialTheme.colorScheme.primary,
+    isImportant: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isImportant) 6.dp else 2.dp
+        )
     ) {
         Column(
             modifier = Modifier
@@ -38,8 +41,8 @@ fun StatsCard(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = value,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = if (isImportant) 32.sp else 28.sp,
+                fontWeight = if (isImportant) FontWeight.ExtraBold else FontWeight.Bold,
                 color = valueColor
             )
             subtitle?.let {
