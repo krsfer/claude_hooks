@@ -1,7 +1,11 @@
 package com.claudehooks.dashboard.presentation.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -34,15 +39,39 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HookEventCard(
     event: HookEvent,
     onClick: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null,
+    searchQuery: String = "",
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf(Instant.now()) }
     var showAbsoluteTime by remember { mutableStateOf(false) }
+    
+    // Pulsing animation for critical events
+    val infiniteTransition = rememberInfiniteTransition(label = "critical_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (event.severity == Severity.CRITICAL) 1.02f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+    
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = if (event.severity == Severity.CRITICAL) 0.6f else 1f,
+        targetValue = if (event.severity == Severity.CRITICAL) 1f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
     
     LaunchedEffect(event.timestamp) {
         while (true) {
@@ -51,11 +80,27 @@ fun HookEventCard(
         }
     }
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(pulseScale)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .then(
+                if (event.severity == Severity.CRITICAL) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = pulseAlpha),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(
             containerColor = when (event.severity) {
-                Severity.CRITICAL -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                Severity.CRITICAL -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
                 Severity.ERROR -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
                 Severity.WARNING -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
                 else -> MaterialTheme.colorScheme.surface
@@ -63,10 +108,17 @@ fun HookEventCard(
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = when (event.severity) {
-                Severity.CRITICAL -> 8.dp
-                Severity.ERROR -> 4.dp
-                Severity.WARNING -> 2.dp
+                Severity.CRITICAL -> 12.dp
+                Severity.ERROR -> 6.dp
+                Severity.WARNING -> 3.dp
                 else -> 1.dp
+            }
+        ),
+        shape = RoundedCornerShape(
+            when (event.severity) {
+                Severity.CRITICAL -> 16.dp
+                Severity.ERROR -> 12.dp
+                else -> 8.dp
             }
         )
     ) {
@@ -122,31 +174,31 @@ fun HookEventCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        HighlightedText(
                             text = event.title,
+                            searchQuery = searchQuery,
                             style = when (event.severity) {
                                 Severity.CRITICAL -> MaterialTheme.typography.titleMedium
                                 else -> MaterialTheme.typography.titleSmall
-                            },
-                            fontWeight = when (event.severity) {
-                                Severity.CRITICAL -> FontWeight.Bold
-                                else -> FontWeight.SemiBold
-                            },
-                            maxLines = if (event.severity == Severity.CRITICAL) 2 else 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (event.severity == Severity.CRITICAL) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
+                            }.copy(
+                                fontWeight = when (event.severity) {
+                                    Severity.CRITICAL -> FontWeight.Bold
+                                    else -> FontWeight.SemiBold
+                                },
+                                color = if (event.severity == Severity.CRITICAL) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
                         )
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
+                        HighlightedText(
                             text = event.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            searchQuery = searchQuery,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
                     }
                     
@@ -183,20 +235,39 @@ fun HookEventCard(
                             }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Icon(
-                            imageVector = Icons.Default.Code,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = event.source,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        // Show tool-specific icon and name for tool events
+                        val toolName = event.metadata["tool_name"]
+                        if (toolName != null && toolName != "unknown" && toolName != "Unknown") {
+                            Icon(
+                                imageVector = getToolIcon(toolName),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = getToolColor(toolName)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = toolName,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = getToolColor(toolName),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Code,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = event.source,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -315,4 +386,36 @@ private fun formatAbsoluteTime(timestamp: Instant): String {
     val formatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm:ss")
         .withZone(ZoneId.systemDefault())
     return formatter.format(timestamp)
+}
+
+/**
+ * Get icon for specific tool name
+ */
+private fun getToolIcon(toolName: String): ImageVector = when (toolName.lowercase()) {
+    "bash" -> Icons.Default.Terminal
+    "read" -> Icons.Default.Description
+    "write" -> Icons.Default.Edit
+    "edit", "multiedit" -> Icons.Default.EditNote
+    "grep", "glob" -> Icons.Default.Search
+    "ls" -> Icons.Default.FolderOpen
+    "webfetch", "websearch" -> Icons.Default.Language
+    "task" -> Icons.Default.Assignment
+    "todowrite" -> Icons.Default.CheckBox
+    "notebookedit" -> Icons.Default.Book
+    else -> Icons.Default.Build
+}
+
+/**
+ * Get color for specific tool name
+ */
+private fun getToolColor(toolName: String): Color = when (toolName.lowercase()) {
+    "bash" -> Color(0xFF4CAF50) // Green
+    "read" -> Color(0xFF2196F3) // Blue
+    "write", "edit", "multiedit" -> Color(0xFFFF9800) // Orange
+    "grep", "glob" -> Color(0xFF9C27B0) // Purple
+    "ls" -> Color(0xFF00BCD4) // Cyan
+    "webfetch", "websearch" -> Color(0xFF3F51B5) // Indigo
+    "task" -> Color(0xFF795548) // Brown
+    "todowrite" -> Color(0xFF4CAF50) // Green
+    else -> Color(0xFF607D8B) // Blue Grey
 }

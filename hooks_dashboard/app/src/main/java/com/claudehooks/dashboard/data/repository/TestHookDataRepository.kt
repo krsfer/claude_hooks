@@ -23,6 +23,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.random.Random
+import com.claudehooks.dashboard.service.PerformanceMonitoringService
+import com.claudehooks.dashboard.service.getPerformanceMonitoringService
 
 class TestHookDataRepository(private val context: Context? = null) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -37,11 +39,18 @@ class TestHookDataRepository(private val context: Context? = null) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
+    private val _lastUpdateTime = MutableStateFlow<Instant?>(null)
+    val lastUpdateTime: StateFlow<Instant?> = _lastUpdateTime.asStateFlow()
+    
     private val eventQueue = ConcurrentLinkedQueue<HookEvent>()
     private val maxEvents = 100
     
+    // Performance monitoring (using singleton to prevent multiple instances)
+    private val performanceMonitor = context?.getPerformanceMonitoringService()
+    
     init {
         // startSimulation() // Disabled test simulation - using real Redis data instead
+        // Performance monitoring is now controlled by UI lifecycle, not started automatically
     }
     
     private fun startSimulation() {
@@ -136,6 +145,13 @@ class TestHookDataRepository(private val context: Context? = null) {
         }
         
         _events.value = eventQueue.sortedByDescending { it.timestamp }
+        
+        // Update last update time for data freshness tracking
+        _lastUpdateTime.value = Instant.now()
+        
+        // Record event for performance monitoring
+        performanceMonitor?.recordEvent()
+        performanceMonitor?.updateEventQueueSize(eventQueue.size)
         
         // Trigger Android notification for notification-type events (if context provided)
         if (event.type == HookType.NOTIFICATION && notificationService != null) {
@@ -244,4 +260,9 @@ class TestHookDataRepository(private val context: Context? = null) {
             Timber.d("Cleaned ${currentEvents.size - filteredEvents.size} old events")
         }
     }
+    
+    /**
+     * Get performance monitoring service
+     */
+    fun getPerformanceMonitor(): PerformanceMonitoringService? = performanceMonitor
 }

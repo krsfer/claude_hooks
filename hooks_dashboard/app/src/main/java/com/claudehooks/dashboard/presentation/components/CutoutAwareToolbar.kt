@@ -202,7 +202,7 @@ private fun CutoutOptimizedLayout(
         // Minimal spacer to position title closer to cutout (optimize space usage)
         Spacer(
             modifier = Modifier.height(
-                maxOf(cutoutInfo.topInset - 48.dp, 8.dp) // Reduce excessive gap, bring title closer to cutout
+                maxOf(cutoutInfo.topInset - 80.dp, 2.dp) // Ultra-aggressive gap reduction to bring title closer
             )
         )
         
@@ -227,7 +227,7 @@ private fun CutoutOptimizedLayout(
                     style = MaterialTheme.typography.titleLarge
                 )
                 Text(
-                    text = "• System UI aware layout •",
+                    text = "• Ultra-optimized spacing •",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -405,7 +405,7 @@ private fun QuitDropdownMenu(
                 onDismiss()
                 scope.launch {
                     snackbarHostState.showSnackbar(
-                        message = "Claude Hooks Dashboard v1.3 - System UI Fix Edition",
+                        message = "Claude Hooks Dashboard v1.4 - Space Optimization Edition",
                         duration = SnackbarDuration.Short
                     )
                 }

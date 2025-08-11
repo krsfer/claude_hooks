@@ -30,7 +30,15 @@ object DataProvider {
             channel = "hooksdata"
         )
         
-        return HookDataRepository(config, context)
+        // Get event limits configuration
+        val limitsConfig = EventLimitsConfig(context)
+        
+        return HookDataRepository(
+            config, 
+            context,
+            maxMemoryEvents = limitsConfig.getMaxMemoryEvents(),
+            defaultDisplayLimit = limitsConfig.getMaxDisplayEvents()
+        )
     }
     
     fun createTestRepository(context: Context): TestHookDataRepository {

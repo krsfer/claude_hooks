@@ -1,6 +1,10 @@
 package com.claudehooks.dashboard.presentation.screens
 
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -10,32 +14,67 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import com.claudehooks.dashboard.data.DataProvider
 import com.claudehooks.dashboard.data.model.DashboardStats
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
+import com.claudehooks.dashboard.data.model.Severity
 import com.claudehooks.dashboard.data.repository.BackgroundServiceRepository
 import com.claudehooks.dashboard.service.ConnectionStatus
 import com.claudehooks.dashboard.data.repository.ConnectionStatus as LegacyConnectionStatus
+import com.claudehooks.dashboard.presentation.components.AdvancedFilterBar
 import com.claudehooks.dashboard.presentation.components.FilterChips
+import com.claudehooks.dashboard.presentation.components.FilterPreset
 import com.claudehooks.dashboard.presentation.components.HookEventCard
 import com.claudehooks.dashboard.presentation.components.StatsCard
+import com.claudehooks.dashboard.data.model.FilterState
+import com.claudehooks.dashboard.presentation.util.applyFilters
+import com.claudehooks.dashboard.presentation.util.extractAvailableSessions
+import com.claudehooks.dashboard.presentation.util.getFilterStats
+import com.claudehooks.dashboard.presentation.components.DataFreshnessIndicator
+import com.claudehooks.dashboard.presentation.components.DataFreshnessBanner
+import com.claudehooks.dashboard.presentation.components.AutoReconnectionIndicator
+import com.claudehooks.dashboard.presentation.components.ReconnectionState
+import com.claudehooks.dashboard.presentation.components.rememberAutoReconnectionState
+import com.claudehooks.dashboard.presentation.components.CutoutAwareToolbar
+import com.claudehooks.dashboard.presentation.util.performReconnection
+import com.claudehooks.dashboard.presentation.components.PerformanceMetricsCard
+import com.claudehooks.dashboard.presentation.components.PerformanceTrendChart
+import com.claudehooks.dashboard.presentation.components.TrendChartType
+import com.claudehooks.dashboard.data.model.PerformanceMetrics
+import com.claudehooks.dashboard.presentation.components.ExportDialog
+import com.claudehooks.dashboard.presentation.components.ShareBottomSheet
+import com.claudehooks.dashboard.service.ExportService
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     repository: BackgroundServiceRepository? = null,
     onQuitRequested: (() -> Unit)? = null,
+    onNavigateToSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -43,22 +82,118 @@ fun DashboardScreen(
     val fallbackRepository = remember { DataProvider.getRepository(context) }
     val testRepository = remember { DataProvider.createTestRepository(context) }
     
-    var selectedFilters by remember { mutableStateOf(emptySet<HookType>()) }
+    var filterState by remember { mutableStateOf(FilterState()) }
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     
+    // Auto-reconnection state management
+    val autoReconnectionState = rememberAutoReconnectionState()
+    
+    // Performance visualization state
+    var showPerformanceMetrics by remember { mutableStateOf(false) }
+    var performanceMetricsExpanded by remember { mutableStateOf(false) }
+    var selectedTrendChart by remember { mutableStateOf(TrendChartType.HEALTH_SCORE) }
+    var trendChartExpanded by remember { mutableStateOf(false) }
+    
+    // Track if app is in foreground
+    var isAppInForeground by remember { mutableStateOf(true) }
+    
+    // Observe lifecycle to pause/resume monitoring
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    isAppInForeground = true
+                    android.util.Log.d("DashboardScreen", "ON_RESUME - App came to foreground, showPerformanceMetrics=$showPerformanceMetrics, useTestData=$useTestData")
+                    // Resume monitoring if it should be running
+                    if (showPerformanceMetrics && !useTestData) {
+                        if (repository != null) {
+                            repository.startPerformanceMonitoring()
+                            android.util.Log.d("DashboardScreen", "Started performance monitoring (repository)")
+                        } else {
+                            fallbackRepository.startPerformanceMonitoring()
+                            android.util.Log.d("DashboardScreen", "Started performance monitoring (fallback)")
+                        }
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    isAppInForeground = false
+                    android.util.Log.d("DashboardScreen", "ON_PAUSE - App went to background, stopping performance monitoring")
+                    // Always pause monitoring when backgrounded
+                    if (repository != null) {
+                        repository.stopPerformanceMonitoring()
+                        android.util.Log.d("DashboardScreen", "Stopped performance monitoring (repository)")
+                    } else {
+                        fallbackRepository.stopPerformanceMonitoring()
+                        android.util.Log.d("DashboardScreen", "Stopped performance monitoring (fallback)")
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    
+    // Control performance monitoring based on toggle AND foreground state
+    LaunchedEffect(showPerformanceMetrics, isAppInForeground) {
+        android.util.Log.d("DashboardScreen", "LaunchedEffect triggered: showPerformanceMetrics=$showPerformanceMetrics, isAppInForeground=$isAppInForeground, useTestData=$useTestData")
+        if (!useTestData) {
+            if (showPerformanceMetrics && isAppInForeground) {
+                // Start performance monitoring when metrics are shown AND app is in foreground
+                android.util.Log.d("DashboardScreen", "LaunchedEffect: Starting monitoring")
+                if (repository != null) {
+                    repository.startPerformanceMonitoring()
+                } else {
+                    fallbackRepository.startPerformanceMonitoring()
+                }
+            } else {
+                // Stop performance monitoring when metrics are hidden OR app is backgrounded
+                android.util.Log.d("DashboardScreen", "LaunchedEffect: Stopping monitoring")
+                if (repository != null) {
+                    repository.stopPerformanceMonitoring()
+                } else {
+                    fallbackRepository.stopPerformanceMonitoring()
+                }
+            }
+        }
+    }
+    
+    // Export functionality state
+    var showExportDialog by remember { mutableStateOf(false) }
+    var showShareBottomSheet by remember { mutableStateOf(false) }
+    var selectedEventForShare by remember { mutableStateOf<HookEvent?>(null) }
+    
     // Use provided BackgroundServiceRepository or fall back to legacy repository
     val useBackgroundService = repository != null
-    val currentRepository = if (useTestData) null else (repository ?: fallbackRepository)
     
     // Observe data from appropriate repository
-    val hookEvents by if (useTestData) {
-        testRepository.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
+    val allHookEvents by if (useTestData) {
+        testRepository.getFilteredEvents(emptySet()).collectAsState(initial = emptyList())
     } else if (useBackgroundService) {
-        repository!!.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
+        repository!!.getFilteredEvents(emptySet()).collectAsState(initial = emptyList())
     } else {
-        fallbackRepository.getFilteredEvents(selectedFilters).collectAsState(initial = emptyList())
+        fallbackRepository.getFilteredEvents(emptySet()).collectAsState(initial = emptyList())
+    }
+    
+    // Apply advanced filtering
+    val hookEvents = remember(allHookEvents, filterState) {
+        allHookEvents.applyFilters(filterState)
+    }
+    
+    // Extract available sessions for filtering
+    val availableSessions = remember(allHookEvents) {
+        allHookEvents.extractAvailableSessions()
+    }
+    
+    // Get filter statistics
+    val filterStats = remember(allHookEvents, filterState) {
+        allHookEvents.getFilterStats(filterState)
     }
     
     val stats by if (useTestData) {
@@ -93,128 +228,99 @@ fun DashboardScreen(
         }.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     }
     
-    // For background service, we don't have isLoading - service is always running
-    val isLoading by if (useTestData) {
-        testRepository.isLoading.collectAsState()
+    // Get last update time for data freshness tracking
+    val lastUpdateTime by if (useTestData) {
+        testRepository.lastUpdateTime.collectAsState()
     } else if (useBackgroundService) {
-        remember { mutableStateOf(false) }
+        repository!!.lastUpdateTime.collectAsState()
     } else {
-        fallbackRepository.isLoading.collectAsState()
+        fallbackRepository.lastUpdateTime.collectAsState()
     }
     
-    // Events are already filtered by the repository based on selectedFilters
+    // Get performance monitoring data
+    val performanceMonitor = remember(useTestData, useBackgroundService) {
+        if (useTestData) {
+            testRepository.getPerformanceMonitor()
+        } else if (useBackgroundService) {
+            repository?.getPerformanceMonitor()
+        } else {
+            fallbackRepository.getPerformanceMonitor()
+        }
+    }
+    
+    // Observe performance metrics
+    val currentPerformanceMetrics by performanceMonitor?.currentMetrics?.collectAsState() 
+        ?: remember { mutableStateOf(PerformanceMetrics()) }
+    
+    val performanceHistory by performanceMonitor?.performanceHistory?.collectAsState() 
+        ?: remember { mutableStateOf(com.claudehooks.dashboard.data.model.PerformanceHistory()) }
+    
+    // Loading state is managed by background service or repositories internally
+    
+    // Events are filtered by advanced filter system
     val filteredEvents = hookEvents
     
+    // Cutout information is handled inside CutoutAwareToolbar
+    
     Scaffold(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxSize(),
+        // Remove windowInsetsPadding to allow CutoutAwareToolbar to position icons above cutout
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = "Claude Hooks Dashboard",
-                        fontWeight = FontWeight.Bold
+            CutoutAwareToolbar(
+                connectionStatus = connectionStatus,
+                lastUpdateTime = lastUpdateTime,
+                useTestData = useTestData,
+                onTestDataToggle = {
+                    useTestData = !useTestData
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = if (useTestData) "Using simulated test data" else "Using live Redis data",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                },
+                onReconnect = {
+                    performReconnection(
+                        autoReconnectionState = autoReconnectionState,
+                        useBackgroundService = useBackgroundService,
+                        repository = repository,
+                        fallbackRepository = fallbackRepository,
+                        scope = scope,
+                        snackbarHostState = snackbarHostState
                     )
                 },
-                navigationIcon = {
-                    // Connection status indicator moved to navigation icon position
-                    when (connectionStatus) {
-                        ConnectionStatus.CONNECTED -> Icon(
-                            imageVector = Icons.Default.CloudDone,
-                            contentDescription = "Connected to Redis",
-                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
-                            tint = Color(0xFF4CAF50)
-                        )
-                        ConnectionStatus.CONNECTING -> CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp).padding(start = 16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        ConnectionStatus.ERROR -> Icon(
-                            imageVector = Icons.Default.CloudOff,
-                            contentDescription = "Connection Error",
-                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        ConnectionStatus.DISCONNECTED -> Icon(
-                            imageVector = Icons.Default.Cloud,
-                            contentDescription = "Disconnected",
-                            modifier = Modifier.size(20.dp).padding(start = 16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                onPerformanceToggle = {
+                    showPerformanceMetrics = !showPerformanceMetrics
+                },
+                showPerformanceMetrics = showPerformanceMetrics,
+                onExport = {
+                    showExportDialog = true
+                },
+                onSettings = {
+                    onNavigateToSettings?.invoke()
+                },
+                onInfo = {
+                    scope.launch {
+                        val statusMessage = if (useTestData) {
+                            "Test mode: Using simulated data"
+                        } else {
+                            when (connectionStatus) {
+                                ConnectionStatus.CONNECTED -> "Connected to Redis successfully"
+                                ConnectionStatus.CONNECTING -> "Connecting to Redis..."
+                                ConnectionStatus.ERROR -> "Connection error - switch to test mode or reconnect"
+                                ConnectionStatus.DISCONNECTED -> "Disconnected from Redis"
+                            }
+                        }
+                        snackbarHostState.showSnackbar(
+                            message = statusMessage,
+                            duration = SnackbarDuration.Long
                         )
                     }
                 },
-                actions = {
-                    // Toggle test data button
-                    IconButton(onClick = {
-                        useTestData = !useTestData
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = if (useTestData) "Using simulated test data" else "Using live Redis data",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    }) {
-                        Icon(
-                            if (useTestData) Icons.Default.BugReport else Icons.Default.CloudDone, 
-                            contentDescription = if (useTestData) "Switch to Live Data" else "Switch to Test Data",
-                            tint = if (useTestData) Color(0xFFFF9800) else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    
-                    // Reconnect button for error states
-                    if (!useTestData && connectionStatus == ConnectionStatus.ERROR) {
-                        IconButton(onClick = {
-                            scope.launch {
-                                if (useBackgroundService) {
-                                    repository!!.reconnect()
-                                } else {
-                                    fallbackRepository.reconnect()
-                                }
-                                snackbarHostState.showSnackbar(
-                                    message = "Attempting to reconnect...",
-                                    duration = SnackbarDuration.Short
-                                )
-                            }
-                        }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Reconnect")
-                        }
-                    }
-                    
-                    // Quit button for background service mode
-                    if (useBackgroundService && onQuitRequested != null) {
-                        IconButton(onClick = onQuitRequested) {
-                            Icon(
-                                imageVector = Icons.Default.ExitToApp,
-                                contentDescription = "Quit App",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                    
-                    IconButton(onClick = {
-                        scope.launch {
-                            val statusMessage = if (useTestData) {
-                                "Test mode: Using simulated data"
-                            } else {
-                                when (connectionStatus) {
-                                    ConnectionStatus.CONNECTED -> "Connected to Redis successfully"
-                                    ConnectionStatus.CONNECTING -> "Connecting to Redis..."
-                                    ConnectionStatus.ERROR -> "Connection error - switch to test mode or reconnect"
-                                    ConnectionStatus.DISCONNECTED -> "Disconnected from Redis"
-                                }
-                            }
-                            snackbarHostState.showSnackbar(
-                                message = statusMessage,
-                                duration = SnackbarDuration.Long
-                            )
-                        }
-                    }) {
-                        Icon(Icons.Default.Info, contentDescription = "Connection Info")
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                )
+                onQuitRequested = onQuitRequested,
+                scope = scope,
+                snackbarHostState = snackbarHostState
             )
         },
         floatingActionButton = {
@@ -282,11 +388,18 @@ fun DashboardScreen(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
+        val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+        
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = 16.dp + navigationBarsPadding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Statistics Section
@@ -303,7 +416,84 @@ fun DashboardScreen(
                 StatsSection(stats = stats)
             }
             
-            // Filter Chips
+            // Auto-reconnection indicator
+            item {
+                AutoReconnectionIndicator(
+                    reconnectionState = autoReconnectionState.reconnectionState.value,
+                    attemptCount = autoReconnectionState.attemptCount.value,
+                    maxAttempts = autoReconnectionState.maxAttempts.value,
+                    onDismiss = { autoReconnectionState.reset() }
+                )
+            }
+            
+            // Data freshness banner for stale data warnings
+            item {
+                DataFreshnessBanner(
+                    lastUpdate = lastUpdateTime,
+                    connectionStatus = connectionStatus,
+                    onReconnectClick = {
+                        performReconnection(
+                            autoReconnectionState = autoReconnectionState,
+                            useBackgroundService = useBackgroundService,
+                            repository = repository,
+                            fallbackRepository = fallbackRepository,
+                            scope = scope,
+                            snackbarHostState = snackbarHostState
+                        )
+                    }
+                )
+            }
+            
+            // Performance Visualization Section
+            if (showPerformanceMetrics) {
+                item {
+                    PerformanceMetricsCard(
+                        metrics = currentPerformanceMetrics,
+                        expanded = performanceMetricsExpanded,
+                        onToggleExpanded = { performanceMetricsExpanded = !performanceMetricsExpanded }
+                    )
+                }
+                
+                item {
+                    PerformanceTrendChart(
+                        history = performanceHistory,
+                        chartType = selectedTrendChart,
+                        expanded = trendChartExpanded,
+                        onToggleExpanded = { trendChartExpanded = !trendChartExpanded }
+                    )
+                }
+                
+                // Chart type selector when expanded
+                if (trendChartExpanded) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TrendChartType.values().forEach { chartType ->
+                                FilterChip(
+                                    onClick = { selectedTrendChart = chartType },
+                                    label = {
+                                        Text(
+                                            text = when (chartType) {
+                                                TrendChartType.MEMORY_USAGE -> "Memory"
+                                                TrendChartType.EVENT_RATE -> "Events"
+                                                TrendChartType.CONNECTION_LATENCY -> "Latency"
+                                                TrendChartType.HEALTH_SCORE -> "Health"
+                                            }
+                                        )
+                                    },
+                                    selected = selectedTrendChart == chartType
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Advanced Filter Section
             item {
                 Column {
                     Row(
@@ -317,28 +507,59 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Badge(
-                            containerColor = MaterialTheme.colorScheme.primary
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = filteredEvents.size.toString(),
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                            // Filter statistics badge
+                            if (filterState.hasActiveFilters()) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Text(
+                                        text = "${filterStats.filteredEvents}/${filterStats.totalEvents}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ) {
+                                Text(
+                                    text = filteredEvents.size.toString(),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
                         }
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    FilterChips(
-                        selectedTypes = selectedFilters,
-                        onTypeToggle = { type ->
-                            selectedFilters = if (type in selectedFilters) {
-                                selectedFilters - type
-                            } else {
-                                selectedFilters + type
-                            }
+                    AdvancedFilterBar(
+                        searchQuery = filterState.searchQuery,
+                        onSearchQueryChange = { query ->
+                            filterState = filterState.updateSearchQuery(query)
                         },
-                        onClearAll = { selectedFilters = emptySet() }
+                        selectedTypes = filterState.selectedTypes,
+                        onTypeToggle = { type ->
+                            filterState = filterState.toggleType(type)
+                        },
+                        selectedSeverities = filterState.selectedSeverities,
+                        onSeverityToggle = { severity ->
+                            filterState = filterState.toggleSeverity(severity)
+                        },
+                        selectedSessions = filterState.selectedSessions,
+                        onSessionToggle = { sessionId ->
+                            filterState = filterState.toggleSession(sessionId)
+                        },
+                        availableSessions = availableSessions,
+                        activePreset = filterState.activePreset,
+                        onPresetApply = { preset ->
+                            filterState = filterState.applyPreset(preset)
+                        },
+                        onClearAll = {
+                            filterState = filterState.clearAll()
+                        }
                     )
                 }
             }
@@ -393,17 +614,37 @@ fun DashboardScreen(
                                 enter = fadeIn() + slideInVertically(),
                                 exit = fadeOut() + slideOutVertically()
                             ) {
-                                HookEventCard(
-                                    event = item,
-                                    onClick = {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                message = "Event details: ${item.title}",
-                                                duration = SnackbarDuration.Short
-                                            )
-                                        }
+                                Column {
+                                    // Add severity divider for critical events
+                                    if (item.severity == Severity.CRITICAL) {
+                                        SeverityDivider(
+                                            severity = item.severity,
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
                                     }
-                                )
+                                    
+                                    HookEventCard(
+                                        event = item,
+                                        searchQuery = filterState.searchQuery,
+                                        onClick = {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    message = "Event details: ${item.title}",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                            }
+                                        },
+                                        onLongClick = {
+                                            selectedEventForShare = item
+                                            showShareBottomSheet = true
+                                        }
+                                    )
+                                    
+                                    // Add separator after critical events
+                                    if (item.severity == Severity.CRITICAL) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -415,6 +656,77 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(72.dp))
             }
         }
+    }
+    
+    // Export Service
+    val exportService = remember { ExportService(context) }
+    
+    // Export Dialog
+    if (showExportDialog) {
+        ExportDialog(
+            onDismiss = { showExportDialog = false },
+            onExport = { format, _ ->
+                scope.launch {
+                    try {
+                        val result = exportService.exportEvents(
+                            events = filteredEvents,
+                            format = format
+                        )
+                        if (result.isSuccess) {
+                            snackbarHostState.showSnackbar(
+                                message = "Export completed successfully!",
+                                duration = SnackbarDuration.Short
+                            )
+                        } else {
+                            snackbarHostState.showSnackbar(
+                                message = "Export failed: ${result.exceptionOrNull()?.message}",
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                    } catch (e: Exception) {
+                        snackbarHostState.showSnackbar(
+                            message = "Export error: ${e.message}",
+                            duration = SnackbarDuration.Long
+                        )
+                    }
+                }
+            },
+            eventCount = filteredEvents.size
+        )
+    }
+    
+    // Share Bottom Sheet
+    if (showShareBottomSheet && selectedEventForShare != null) {
+        ShareBottomSheet(
+            event = selectedEventForShare!!,
+            onDismiss = {
+                showShareBottomSheet = false
+                selectedEventForShare = null
+            },
+            onShareText = {
+                val shareContent = "Hook Event: ${selectedEventForShare!!.title}\n${selectedEventForShare!!.message}\nSource: ${selectedEventForShare!!.source}\nTime: ${selectedEventForShare!!.timestamp}"
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, shareContent)
+                    putExtra(Intent.EXTRA_SUBJECT, "Claude Hook Event")
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share Event"))
+            },
+            onCopyToClipboard = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(
+                    "Hook Event", 
+                    "${selectedEventForShare!!.title}: ${selectedEventForShare!!.message}"
+                )
+                clipboard.setPrimaryClip(clip)
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Event copied to clipboard",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -439,6 +751,7 @@ private fun StatsSection(stats: DashboardStats) {
                 subtitle = "Requires attention",
                 valueColor = MaterialTheme.colorScheme.error,
                 cardColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                isImportant = stats.criticalCount > 0,
                 modifier = Modifier.width(150.dp)
             )
         }
@@ -449,6 +762,7 @@ private fun StatsSection(stats: DashboardStats) {
                 subtitle = "Monitor closely",
                 valueColor = Color(0xFFFF9800),
                 cardColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                isImportant = stats.warningCount > 0,
                 modifier = Modifier.width(150.dp)
             )
         }
@@ -529,7 +843,6 @@ private fun groupEventsByTime(events: List<HookEvent>): List<EventGroup> {
     
     for (event in events) {
         val secondsAgo = ChronoUnit.SECONDS.between(event.timestamp, now)
-        val hoursAgo = ChronoUnit.HOURS.between(event.timestamp, now)
         val daysAgo = ChronoUnit.DAYS.between(event.timestamp, now)
         
         when {
@@ -587,3 +900,44 @@ private fun TimeGroupHeader(
         }
     }
 }
+
+/**
+ * Severity divider for visual separation of critical events
+ */
+@Composable
+private fun SeverityDivider(
+    severity: Severity,
+    modifier: Modifier = Modifier
+) {
+    val (color, label) = when (severity) {
+        Severity.CRITICAL -> MaterialTheme.colorScheme.error to "🚨 CRITICAL ALERTS"
+        Severity.ERROR -> MaterialTheme.colorScheme.error to "⚠️ ERRORS"
+        Severity.WARNING -> Color(0xFFFF9800) to "⚠️ WARNINGS"
+        Severity.INFO -> MaterialTheme.colorScheme.primary to "ℹ️ INFORMATION"
+    }
+    
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Divider(
+            modifier = Modifier.weight(1f),
+            color = color,
+            thickness = 2.dp
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Divider(
+            modifier = Modifier.weight(1f),
+            color = color,
+            thickness = 2.dp
+        )
+    }
+}
+
+

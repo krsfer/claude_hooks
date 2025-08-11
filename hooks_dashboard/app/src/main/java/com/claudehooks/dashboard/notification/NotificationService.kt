@@ -31,8 +31,10 @@ class NotificationService(private val context: Context) {
     }
     
     fun showNotificationForHookEvent(event: HookEvent) {
-        // Only show notifications for NOTIFICATION type events as requested
-        if (event.type != HookType.NOTIFICATION) {
+        // Show notifications for NOTIFICATION type events, SESSION_START events, and USER_PROMPT_SUBMIT events
+        if (event.type != HookType.NOTIFICATION && 
+            event.type != HookType.SESSION_START && 
+            event.type != HookType.USER_PROMPT_SUBMIT) {
             return
         }
         
@@ -84,13 +86,19 @@ class NotificationService(private val context: Context) {
     }
     
     private fun isSystemNotification(event: HookEvent): Boolean {
+        // Session start and user prompt submit events are always considered system notifications
+        if (event.type == HookType.SESSION_START || event.type == HookType.USER_PROMPT_SUBMIT) {
+            return true
+        }
+        
         // Detect system notifications based on title or message content
         val systemKeywords = listOf(
             "system notification",
             "system alert", 
             "system event",
             "claude code",
-            "hook system"
+            "hook system",
+            "session started"
         )
         
         val titleLower = event.title.lowercase()

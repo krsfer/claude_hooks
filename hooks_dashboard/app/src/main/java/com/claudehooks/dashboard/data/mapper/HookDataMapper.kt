@@ -46,7 +46,12 @@ object HookDataMapper {
             "pre_tool_use" -> {
                 val toolName = extractToolName(redisData.payload)
                 Timber.d("pre_tool_use - extracted tool name: '$toolName'")
-                if (toolName == "Unknown") "Tool Use" else "Tool Use: $toolName"
+                // Show more descriptive title when tool name is unknown
+                if (toolName == "Unknown") {
+                    "Tool Execution Starting"
+                } else {
+                    "Executing: $toolName"
+                }
             }
             "post_tool_use" -> {
                 val toolName = extractToolName(redisData.payload)
@@ -56,7 +61,12 @@ object HookDataMapper {
                 // Use core execution time if payload is null or 0, otherwise use payload
                 val execTime = if (payloadExecTime != null && payloadExecTime > 0) payloadExecTime else coreExecTime
                 Timber.d("post_tool_use - execution times - payload: $payloadExecTime, core: $coreExecTime, final: $execTime")
-                if (toolName == "Unknown") "Tool Completed (${execTime}ms)" else "Tool Completed: $toolName (${execTime}ms)"
+                // Show more descriptive title when tool name is unknown
+                if (toolName == "Unknown") {
+                    "Tool Completed (${execTime}ms)"
+                } else {
+                    "$toolName Completed (${execTime}ms)"
+                }
             }
             "notification" -> "Notification: ${redisData.payload.notification_type ?: "System"}"
             "stop_hook" -> "Session Stopped"
@@ -85,30 +95,84 @@ object HookDataMapper {
             }
             "pre_tool_use" -> {
                 val toolName = extractToolName(redisData.payload)
-                if (toolName == "Unknown") "Preparing to execute tool" else "Preparing to execute $toolName"
+                val toolInput = when(toolName) {
+                    "Bash" -> redisData.payload.command?.take(50)?.let { " command: $it" } ?: ""
+                    "Read", "Write", "Edit" -> redisData.payload.file_path?.let { " file: ${it.substringAfterLast("/")}" } ?: ""
+                    "Grep" -> redisData.payload.pattern?.take(30)?.let { " pattern: $it" } ?: ""
+                    "WebFetch" -> redisData.payload.url?.let { " url: ${it.take(40)}" } ?: ""
+                    "WebSearch" -> redisData.payload.query?.take(30)?.let { " query: $it" } ?: ""
+                    else -> ""
+                }
+                
+                if (toolName == "Unknown") {
+                    // Try to show any available context when tool name is unknown
+                    val context = when {
+                        !redisData.payload.command.isNullOrEmpty() -> " (command execution)"
+                        !redisData.payload.file_path.isNullOrEmpty() -> " (file operation)"
+                        !redisData.payload.pattern.isNullOrEmpty() -> " (search operation)"
+                        !redisData.payload.url.isNullOrEmpty() -> " (web operation)"
+                        else -> ""
+                    }
+                    "Tool execution starting$context"
+                } else {
+                    "Starting $toolName tool$toolInput"
+                }
             }
             "post_tool_use" -> {
+                val toolName = extractToolName(redisData.payload)
                 val payloadExecTime = redisData.payload.execution_time_ms
                 val coreExecTime = redisData.core.execution_time_ms
                 val execTime = if (payloadExecTime != null && payloadExecTime > 0) payloadExecTime else coreExecTime
                 val success = redisData.payload.success ?: true
-                val status = if (success) "completed" else "failed"
+                val status = if (success) "completed successfully" else "failed"
                 
-                "Tool execution $status in ${execTime}ms"
+                if (toolName == "Unknown") {
+                    "Tool execution $status in ${execTime}ms"
+                } else {
+                    "$toolName $status in ${execTime}ms"
+                }
             }
             "notification" -> redisData.payload.message ?: "System notification"
             "stop_hook" -> "Session terminated"
             "sub_agent_stop_hook" -> "Sub-agent task completed"
-            "pre_compact" -> "Memory compaction: ${redisData.payload.compact_reason}"
+            "pre_compact" -> {
+                val reason = redisData.payload.compact_reason
+                if (reason.isNullOrBlank()) {
+                    "Memory compaction initiated"
+                } else {
+                    "Memory compaction: $reason"
+                }
+            }
             else -> redisData.payload.message ?: "Hook event occurred"
         } ?: "Event occurred"
     }
     
     private fun extractToolName(payload: PayloadData): String {
-        // If tool_name is "unknown" or "Unknown", try to extract from other sources
+        // If tool_name is present and valid, use it
         val toolName = when {
             payload.tool_name != null && 
-            payload.tool_name.lowercase() !in listOf("unknown", "null") -> payload.tool_name
+            payload.tool_name.lowercase() !in listOf("unknown", "null", "") -> {
+                // Normalize common tool names to consistent format
+                when(payload.tool_name.lowercase()) {
+                    "bash", "bashttool" -> "Bash"
+                    "read", "readtool" -> "Read"
+                    "write", "writetool" -> "Write"
+                    "edit", "edittool" -> "Edit"
+                    "multiedit", "multiedittool" -> "MultiEdit"
+                    "grep", "greptool" -> "Grep"
+                    "glob", "globtool" -> "Glob"
+                    "ls", "lstool" -> "LS"
+                    "webfetch", "webfetchtool" -> "WebFetch"
+                    "websearch", "websearchtool" -> "WebSearch"
+                    "task", "tasktool" -> "Task"
+                    "todowrite", "todowritetool" -> "TodoWrite"
+                    "exitplanmode", "exitplanmodetool" -> "ExitPlanMode"
+                    "notebookedit", "notebookedittool" -> "NotebookEdit"
+                    "bashoutput", "bashoutputtool" -> "BashOutput"
+                    "killbash", "killbashtool" -> "KillBash"
+                    else -> payload.tool_name
+                }
+            }
             payload.name != null -> payload.name
             payload.tool != null -> payload.tool
             payload.command != null -> "Bash"

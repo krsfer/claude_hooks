@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.10"
+    id("com.google.devtools.ksp") version "1.9.10-1.0.13"
 }
 
 android {
@@ -13,8 +14,8 @@ android {
         applicationId = "com.claudehooks.dashboard"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -74,6 +75,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     
+    // ConstraintLayout for Compose - enables declarative constraints
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+    
     // Redis Client
     implementation("io.lettuce:lettuce-core:6.3.1.RELEASE")
     
@@ -86,6 +90,14 @@ dependencies {
     
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
+    
+    // Room database for local persistence
+    implementation("androidx.room:room-runtime:2.5.2")
+    implementation("androidx.room:room-ktx:2.5.2")
+    ksp("androidx.room:room-compiler:2.5.2")
+    
+    // JSON serialization for database converters
+    implementation("com.google.code.gson:gson:2.10.1")
     
     // Java 8+ API desugaring support
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")

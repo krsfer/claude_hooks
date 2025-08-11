@@ -7,4 +7,46 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Active Hook Colors -->
+    <color name="hook_primary">#FF6B35</color>          <!-- Vibrant Orange -->
+    <color name="hook_gold">#FFD700</color>             <!-- Gold -->
+    <color name="hook_shadow">#E55B2B</color>           <!-- Darker Orange -->
+    <color name="hook_monochrome">#424242</color>       <!-- Gray for monochrome -->
+    
+    <!-- Option 1: Cosmic Purple-Blue (Professional Tech) -->
+    <color name="bg_cosmic_start">#667eea</color>       <!-- Soft Blue -->
+    <color name="bg_cosmic_end">#764ba2</color>         <!-- Deep Purple -->
+    
+    <!-- Option 2: Sunset Gradient (Warm & Professional) -->
+    <color name="bg_sunset_start">#ff9a9e</color>       <!-- Soft Pink -->
+    <color name="bg_sunset_mid">#fecfef</color>         <!-- Light Pink -->
+    <color name="bg_sunset_end">#fecfef</color>         <!-- Pale Pink -->
+    
+    <!-- Option 3: Ocean Wave (Cool & Modern) -->
+    <color name="bg_ocean_start">#2193b0</color>        <!-- Deep Blue -->
+    <color name="bg_ocean_end">#6dd5ed</color>          <!-- Light Cyan -->
+    
+    <!-- Option 4: Forest Mist (Natural & Professional) -->
+    <color name="bg_forest_start">#134e5e</color>       <!-- Deep Teal -->
+    <color name="bg_forest_end">#71b280</color>         <!-- Fresh Green -->
+    
+    <!-- Option 5: Aurora (Vibrant & Modern) -->
+    <color name="bg_aurora_start">#ee9ca7</color>       <!-- Rose Pink -->
+    <color name="bg_aurora_end">#ffdde1</color>         <!-- Pale Rose -->
+    
+    <!-- Option 6: Tech Gradient (Professional Blue-Purple) -->
+    <color name="bg_tech_start">#4facfe</color>         <!-- Electric Blue -->
+    <color name="bg_tech_end">#00f2fe</color>           <!-- Cyan -->
+    
+    <!-- Default Active Colors (Currently using Cosmic) -->
+    <color name="background_gradient_start">@color/bg_cosmic_start</color>
+    <color name="background_gradient_end">@color/bg_cosmic_end</color>
+    
+    <!-- Legacy Modern App Icon Colors (kept for reference) -->
+    <color name="icon_primary">#1A237E</color>
+    <color name="icon_accent">#2196F3</color>
+    <color name="icon_highlight">#00C853</color>
+    <color name="icon_surface">#FFFFFF</color>
+    <color name="icon_monochrome">#616161</color>
 </resources>

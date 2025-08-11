@@ -69,7 +69,7 @@ object NotificationChannels {
             val claudehookChannel = NotificationChannel(
                 CLAUDEHOOK_CHANNEL_ID,
                 "Claude Hook System",
-                NotificationManager.IMPORTANCE_MAX
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "System notifications from Claude Code hooks"
                 enableLights(true)

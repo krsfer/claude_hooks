@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Hook Eye -->
+    <path
+        android:pathData="M30,28 C34.4,28 38,32.5 38,40 C38,47.5 34.4,52 30,52 C25.6,52 22,47.5 22,40 C22,32.5 25.6,28 30,28 Z"
+        android:fillColor="@color/hook_monochrome"
+        android:strokeWidth="2"
+        android:strokeColor="@color/hook_monochrome"/>
+    
+    <!-- Hook Eye Center -->
+    <path
+        android:pathData="M30,34 C32.2,34 34,36.7 34,40 C34,43.3 32.2,46 30,46 C27.8,46 26,43.3 26,40 C26,36.7 27.8,34 30,34 Z"
+        android:fillColor="@color/hook_monochrome"/>
+    
+    <!-- Hook Shaft - Main body -->
+    <path
+        android:pathData="M38,40 Q50,40 60,42 Q70,44 75,50 Q78,56 76,62 Q74,68 70,72 Q65,75 58,76 Q52,77 46,75"
+        android:strokeWidth="8"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Hook Shaft - Inner highlight -->
+    <path
+        android:pathData="M38,40 Q50,40 60,42 Q70,44 75,50 Q78,56 76,62 Q74,68 70,72 Q65,75 58,76 Q52,77 46,75"
+        android:strokeWidth="4"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Hook Bend/Curve reinforcement -->
+    <path
+        android:pathData="M74,58 Q76,64 72,70 Q68,74 62,75"
+        android:strokeWidth="6"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Hook Barb - Outer -->
+    <path
+        android:pathData="M46,75 Q42,78 38,74 Q36,70 40,66 Q44,68 46,72"
+        android:strokeWidth="6"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Hook Barb - Inner point -->
+    <path
+        android:pathData="M44,73 Q40,75 38,72 Q37,69 40,68 Q42,69 44,71"
+        android:strokeWidth="3"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Hook Point -->
+    <path
+        android:pathData="M58,76 Q54,80 50,78 Q48,76 50,74 Q54,74 58,76"
+        android:strokeWidth="4"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"/>
+    
+    <!-- Fishing line attachment -->
+    <path
+        android:pathData="M30,28 L30,40"
+        android:strokeWidth="2"
+        android:strokeColor="@color/hook_monochrome"
+        android:strokeLineCap="round"/>
+    
+</vector>

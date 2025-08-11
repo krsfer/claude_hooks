@@ -8,6 +8,7 @@ import io.lettuce.core.SslOptions
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection
 import io.lettuce.core.pubsub.RedisPubSubListener
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -156,13 +157,38 @@ class RedisService(
             
             awaitClose {
                 try {
-                    pubSub.sync().unsubscribe(config.channel)
+                    // Only try to unsubscribe if connection is still open
+                    if (pubSubConnection?.isOpen == true) {
+                        pubSub.sync().unsubscribe(config.channel)
+                        Timber.d("Unsubscribed from Redis channel: ${config.channel}")
+                    } else {
+                        Timber.d("Redis connection already closed, skipping unsubscribe")
+                    }
                 } catch (e: Exception) {
-                    Timber.e(e, "Error unsubscribing from Redis")
+                    // Don't log as error if it's just a closed connection during cleanup
+                    when {
+                        e is io.lettuce.core.RedisException && e.message?.contains("closed") == true -> {
+                            Timber.d("Connection already closed during unsubscribe (expected during cleanup)")
+                        }
+                        e is CancellationException -> {
+                            Timber.d("Unsubscribe cancelled (expected during cleanup)")
+                        }
+                        else -> {
+                            Timber.w(e, "Error unsubscribing from Redis")
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
-            Timber.e(e, "Error setting up Redis subscription")
+            // Don't log cancellation as an error during cleanup
+            when (e) {
+                is CancellationException -> {
+                    Timber.d("Redis subscription cancelled (expected during cleanup)")
+                }
+                else -> {
+                    Timber.e(e, "Error setting up Redis subscription")
+                }
+            }
             close(e)
         }
     }
