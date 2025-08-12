@@ -65,7 +65,14 @@
       "Bash(DEBUG=1 whoami)",
       "Bash(awk:*)",
       "WebFetch(domain:modelcontextprotocol.io)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(env)",
+      "Bash(claude mcp:*)",
+      "Bash(./test_mcp_activity.sh:*)",
+      "Bash(./test_serena_mcp.sh:*)",
+      "Bash(./test_serena_claude.sh:*)",
+      "Bash(./test_enhanced_toasts.sh:*)",
+      "Bash(clear)"
     ],
     "deny": []
   }

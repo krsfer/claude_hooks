@@ -628,9 +628,10 @@ fun DashboardScreen(
                                         searchQuery = filterState.searchQuery,
                                         onClick = {
                                             scope.launch {
+                                                val enrichedMessage = buildEventDetailsMessage(item)
                                                 snackbarHostState.showSnackbar(
-                                                    message = "Event details: ${item.title}",
-                                                    duration = SnackbarDuration.Short
+                                                    message = enrichedMessage,
+                                                    duration = SnackbarDuration.Long
                                                 )
                                             }
                                         },
@@ -727,6 +728,98 @@ fun DashboardScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * Builds an enriched message for event details that shows information not immediately visible on the card
+ */
+private fun buildEventDetailsMessage(event: HookEvent): String {
+    val details = mutableListOf<String>()
+    
+    // Add MCP-specific details if this is an MCP event
+    val isMcpEvent = event.metadata["is_mcp_tool"]?.toBoolean() == true
+    if (isMcpEvent) {
+        val mcpServer = event.metadata["mcp_server"]
+        val mcpTool = event.metadata["mcp_tool"]
+        val responseTime = event.metadata["response_time"]
+        
+        details.add("🔌 MCP Server: ${mcpServer ?: "Unknown"}")
+        details.add("🛠️ Tool: ${mcpTool ?: "Unknown"}")
+        
+        responseTime?.let { 
+            details.add("⏱️ Response: ${it}ms")
+        }
+        
+        // Add error details if present
+        event.metadata["error"]?.takeIf { it.isNotEmpty() }?.let { error ->
+            details.add("❌ Error: $error")
+        }
+        
+        // Add session info
+        event.metadata["session_id"]?.let { sessionId ->
+            details.add("🔗 Session: ${sessionId.take(8)}...")
+        }
+    } else {
+        // For non-MCP events, show other hidden metadata
+        
+        // Show source if different from what's visible
+        if (event.source != "Claude Code") {
+            details.add("📡 Source: ${event.source}")
+        }
+        
+        // Show session info
+        event.metadata["session_id"]?.let { sessionId ->
+            details.add("🔗 Session: ${sessionId.take(8)}...")
+        }
+        
+        // Show sequence number if available
+        event.metadata["sequence"]?.let { seq ->
+            details.add("🔢 Sequence: #$seq")
+        }
+        
+        // Show any error information
+        event.metadata["error"]?.takeIf { it.isNotEmpty() }?.let { error ->
+            details.add("❌ Error: $error")
+        }
+        
+        // Show tool info for tool events
+        event.metadata["tool_name"]?.takeIf { it != "Unknown" && it != "unknown" }?.let { tool ->
+            details.add("🛠️ Tool: $tool")
+        }
+        
+        // Show compact reason if available
+        event.metadata["compact_reason"]?.let { reason ->
+            details.add("📦 Compact: $reason")
+        }
+    }
+    
+    // Add timing details
+    val now = java.time.Instant.now()
+    val duration = java.time.Duration.between(event.timestamp, now)
+    when {
+        duration.toSeconds() < 60 -> details.add("🕐 ${duration.toSeconds()}s ago")
+        duration.toMinutes() < 60 -> details.add("🕐 ${duration.toMinutes()}m ago")
+        duration.toHours() < 24 -> details.add("🕐 ${duration.toHours()}h ago")
+        else -> details.add("🕐 ${duration.toDays()}d ago")
+    }
+    
+    // Add severity with emoji if not INFO
+    if (event.severity != com.claudehooks.dashboard.data.model.Severity.INFO) {
+        val severityEmoji = when (event.severity) {
+            com.claudehooks.dashboard.data.model.Severity.CRITICAL -> "🚨"
+            com.claudehooks.dashboard.data.model.Severity.ERROR -> "⚠️"
+            com.claudehooks.dashboard.data.model.Severity.WARNING -> "⚠️"
+            else -> "ℹ️"
+        }
+        details.add("$severityEmoji ${event.severity}")
+    }
+    
+    return if (details.isNotEmpty()) {
+        details.joinToString(" • ")
+    } else {
+        // Fallback if no additional details available - remove the redundant toast
+        "Tap and hold for sharing options"
     }
 }
 

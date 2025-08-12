@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.claudehooks.dashboard.R
+import com.claudehooks.dashboard.data.manager.McpServerManager
 import com.claudehooks.dashboard.data.model.HookEvent
 import com.claudehooks.dashboard.data.model.HookType
 import com.claudehooks.dashboard.data.model.Severity
@@ -24,6 +25,7 @@ class NotificationService(private val context: Context) {
     }
     
     private val notificationManager = NotificationManagerCompat.from(context)
+    private val mcpServerManager = McpServerManager()
     
     init {
         // Ensure notification channels are created
@@ -31,27 +33,36 @@ class NotificationService(private val context: Context) {
     }
     
     fun showNotificationForHookEvent(event: HookEvent) {
-        // Show notifications for NOTIFICATION type events, SESSION_START events, and USER_PROMPT_SUBMIT events
+        // Show notifications for NOTIFICATION type events, SESSION_START events, USER_PROMPT_SUBMIT events, and MCP tool events
+        val isMcpEvent = event.metadata["is_mcp_tool"]?.toBoolean() == true
+        
+        // Track MCP server activity if applicable
+        if (isMcpEvent) {
+            mcpServerManager.trackMcpToolCall(event)
+        }
+        
         if (event.type != HookType.NOTIFICATION && 
             event.type != HookType.SESSION_START && 
-            event.type != HookType.USER_PROMPT_SUBMIT) {
+            event.type != HookType.USER_PROMPT_SUBMIT &&
+            !isMcpEvent) {
             return
         }
         
-        // Check if this is a system notification
+        // Check if this is a system notification or MCP notification
         val isSystemNotification = isSystemNotification(event)
+        val isMcpNotification = isMcpEvent && (event.type == HookType.PRE_TOOL_USE || event.type == HookType.POST_TOOL_USE)
         
         try {
-            // For system notifications, use the claudehook channel and show toast
-            val channelId = if (isSystemNotification) {
-                NotificationChannels.CLAUDEHOOK_CHANNEL_ID
-            } else {
-                NotificationChannels.getChannelIdForSeverity(event.severity)
+            // For system notifications and MCP notifications, use the claudehook channel and show toast
+            val channelId = when {
+                isSystemNotification -> NotificationChannels.CLAUDEHOOK_CHANNEL_ID
+                isMcpNotification -> NotificationChannels.CLAUDEHOOK_CHANNEL_ID
+                else -> NotificationChannels.getChannelIdForSeverity(event.severity)
             }
             
-            // Show toast for system notifications
-            if (isSystemNotification) {
-                showToastForSystemNotification(event)
+            // Show toast for system notifications and MCP notifications
+            if (isSystemNotification || isMcpNotification) {
+                showToastForSystemNotification(event, isMcpNotification)
             }
             
             // Check if notifications are enabled for this channel
@@ -60,7 +71,7 @@ class NotificationService(private val context: Context) {
                 return
             }
             
-            val notification = createNotification(event, channelId, isSystemNotification)
+            val notification = createNotification(event, channelId, isSystemNotification, isMcpNotification)
             val notificationId = generateNotificationId(event)
             
             // Check if we have notification permission (API 33+)
@@ -109,22 +120,30 @@ class NotificationService(private val context: Context) {
         } || event.source.lowercase().contains("system")
     }
     
-    private fun showToastForSystemNotification(event: HookEvent) {
+    private fun showToastForSystemNotification(event: HookEvent, isMcpNotification: Boolean = false) {
         try {
-            val toastMessage = "System: ${event.title}"
+            val toastMessage = when {
+                isMcpNotification -> {
+                    val mcpServer = event.metadata["mcp_server"] ?: "MCP"
+                    val mcpTool = event.metadata["mcp_tool"] ?: event.metadata["tool_name"] ?: "Tool"
+                    "🔌 MCP: $mcpServer → $mcpTool"
+                }
+                else -> "System: ${event.title}"
+            }
             
             // Ensure toast is shown on the main thread
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show()
             }
             
-            Timber.d("Toast shown for system notification: ${event.title}")
+            val notificationType = if (isMcpNotification) "MCP" else "system"
+            Timber.d("Toast shown for $notificationType notification: ${event.title}")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to show toast for system notification")
+            Timber.e(e, "Failed to show toast for notification")
         }
     }
     
-    private fun createNotification(event: HookEvent, channelId: String, isSystemNotification: Boolean = false): android.app.Notification {
+    private fun createNotification(event: HookEvent, channelId: String, isSystemNotification: Boolean = false, isMcpNotification: Boolean = false): android.app.Notification {
         // Create intent to open the app when notification is tapped
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -144,22 +163,47 @@ class NotificationService(private val context: Context) {
         val timeString = event.timestamp.atZone(java.time.ZoneId.systemDefault()).format(timeFormatter)
         
         // Create notification content
-        val title = if (isSystemNotification) "🔔 ${event.title}" else event.title
-        val priority = if (isSystemNotification) NotificationCompat.PRIORITY_MAX else getNotificationPriority(event.severity)
+        val (title, message, subText) = when {
+            isMcpNotification -> {
+                val mcpServer = event.metadata["mcp_server"] ?: "MCP"
+                val mcpTool = event.metadata["mcp_tool"] ?: event.metadata["tool_name"] ?: "Tool"
+                val serverState = mcpServerManager.getServerState(mcpServer)
+                val statsText = serverState?.let {
+                    " (${it.toolCallCount} calls, ${it.successCount}✓)"
+                } ?: ""
+                Triple(
+                    "🔌 MCP: $mcpServer$statsText",
+                    "$mcpTool → ${event.message}",
+                    "$timeString • MCP Server Activity"
+                )
+            }
+            isSystemNotification -> Triple("🔔 ${event.title}", event.message, "$timeString • ${event.source}")
+            else -> Triple(event.title, event.message, "$timeString • ${event.source}")
+        }
+        
+        val priority = when {
+            isMcpNotification -> NotificationCompat.PRIORITY_HIGH
+            isSystemNotification -> NotificationCompat.PRIORITY_MAX
+            else -> getNotificationPriority(event.severity)
+        }
         
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(getNotificationIcon(event.severity))
+            .setSmallIcon(if (isMcpNotification) android.R.drawable.ic_menu_manage else getNotificationIcon(event.severity))
             .setContentTitle(title)
-            .setContentText(event.message)
-            .setSubText("$timeString • ${event.source}")
+            .setContentText(message)
+            .setSubText(subText)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(priority)
-            .setCategory(if (isSystemNotification) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_EVENT)
+            .setCategory(when {
+                isMcpNotification -> NotificationCompat.CATEGORY_SERVICE
+                isSystemNotification -> NotificationCompat.CATEGORY_ALARM
+                else -> NotificationCompat.CATEGORY_EVENT
+            })
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             
-        // Add vibration and wearable support for system notifications
-        if (isSystemNotification) {
+        // Add vibration and wearable support for system and MCP notifications
+        if (isSystemNotification || isMcpNotification) {
             // Custom vibration pattern for immediate attention
             // Pattern: wait 0ms, vibrate 800ms, pause 250ms, vibrate 300ms, pause 250ms, vibrate 300ms
             val vibrationPattern = longArrayOf(0, 800, 250, 300, 250, 300)
@@ -182,11 +226,11 @@ class NotificationService(private val context: Context) {
         }
         
         // Add expanded style for longer messages
-        if (event.message.length > 50) {
+        if (message.length > 50) {
             builder.setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText(event.message)
-                    .setSummaryText(event.source)
+                    .bigText(message)
+                    .setSummaryText(if (isMcpNotification) "MCP: ${event.metadata["mcp_server"]}" else event.source)
             )
         }
         
@@ -199,8 +243,12 @@ class NotificationService(private val context: Context) {
             )
         }
         
-        // Add color based on severity or system notification
-        val color = if (isSystemNotification) 0xFF4CAF50.toInt() else getNotificationColor(event.severity) // Green for system notifications
+        // Add color based on notification type
+        val color = when {
+            isMcpNotification -> 0xFF9C27B0.toInt() // Purple for MCP notifications
+            isSystemNotification -> 0xFF4CAF50.toInt() // Green for system notifications
+            else -> getNotificationColor(event.severity)
+        }
         builder.color = color
         
         return builder.build()
@@ -272,4 +320,108 @@ class NotificationService(private val context: Context) {
     fun areNotificationsEnabled(): Boolean {
         return notificationManager.areNotificationsEnabled()
     }
+    
+    fun showMcpServerConnectionNotification(serverName: String, isConnected: Boolean, error: String? = null) {
+        mcpServerManager.trackMcpServerConnection(serverName, isConnected, error)
+        
+        val channelId = NotificationChannels.CLAUDEHOOK_CHANNEL_ID
+        if (!NotificationChannels.isNotificationChannelEnabled(context, channelId)) {
+            return
+        }
+        
+        val title = if (isConnected) {
+            "✅ MCP Server Connected: $serverName"
+        } else {
+            "❌ MCP Server Disconnected: $serverName"
+        }
+        
+        val message = error ?: if (isConnected) {
+            "Server is now active and ready for tool calls"
+        } else {
+            "Server connection lost"
+        }
+        
+        val notificationId = "mcp_connection_$serverName".hashCode()
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("mcp_server", serverName)
+        }
+        
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(if (isConnected) android.R.drawable.ic_menu_manage else android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setColor(if (isConnected) 0xFF4CAF50.toInt() else 0xFFD32F2F.toInt())
+            .build()
+        
+        try {
+            notificationManager.notify(notificationId, notification)
+            Timber.d("MCP server connection notification shown for $serverName: $isConnected")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to show MCP server connection notification")
+        }
+    }
+    
+    fun showMcpServerErrorNotification(serverName: String, error: String, toolName: String? = null) {
+        mcpServerManager.trackMcpServerError(serverName, error)
+        
+        val channelId = NotificationChannels.getChannelIdForSeverity(Severity.ERROR)
+        if (!NotificationChannels.isNotificationChannelEnabled(context, channelId)) {
+            return
+        }
+        
+        val title = "⚠️ MCP Server Error: $serverName"
+        val message = toolName?.let { "Tool '$it' failed: $error" } ?: error
+        
+        val notificationId = "mcp_error_$serverName".hashCode()
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("mcp_server", serverName)
+            putExtra("error", error)
+        }
+        
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setColor(0xFFFF9800.toInt()) // Orange for warnings
+            .build()
+        
+        try {
+            notificationManager.notify(notificationId, notification)
+            Timber.d("MCP server error notification shown for $serverName: $error")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to show MCP server error notification")
+        }
+    }
+    
+    fun getMcpServerStatistics() = mcpServerManager.getServerStatistics()
+    
+    fun getMcpServerState(serverName: String) = mcpServerManager.getServerState(serverName)
+    
+    fun getActiveServers() = mcpServerManager.activeServers.value
 }
