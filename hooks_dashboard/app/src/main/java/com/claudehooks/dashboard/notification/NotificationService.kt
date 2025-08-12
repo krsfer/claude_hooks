@@ -33,7 +33,7 @@ class NotificationService(private val context: Context) {
     }
     
     fun showNotificationForHookEvent(event: HookEvent) {
-        // Show notifications for NOTIFICATION type events, SESSION_START events, USER_PROMPT_SUBMIT events, and MCP tool events
+        // Show notifications for most event types, with special handling for system notifications
         val isMcpEvent = event.metadata["is_mcp_tool"]?.toBoolean() == true
         
         // Track MCP server activity if applicable
@@ -41,10 +41,19 @@ class NotificationService(private val context: Context) {
             mcpServerManager.trackMcpToolCall(event)
         }
         
-        if (event.type != HookType.NOTIFICATION && 
-            event.type != HookType.SESSION_START && 
-            event.type != HookType.USER_PROMPT_SUBMIT &&
-            !isMcpEvent) {
+        // Show notifications for all important event types including system notifications
+        val shouldShowNotification = event.type == HookType.NOTIFICATION || 
+            event.type == HookType.SESSION_START || 
+            event.type == HookType.USER_PROMPT_SUBMIT ||
+            event.type == HookType.PRE_TOOL_USE ||
+            event.type == HookType.POST_TOOL_USE ||
+            event.type == HookType.STOP_HOOK ||
+            event.type == HookType.SUB_AGENT_STOP_HOOK ||
+            event.type == HookType.PRE_COMPACT ||
+            isMcpEvent ||
+            isSystemNotification(event)
+        
+        if (!shouldShowNotification) {
             return
         }
         
@@ -107,9 +116,13 @@ class NotificationService(private val context: Context) {
             "system notification",
             "system alert", 
             "system event",
+            "system",
+            "notification: system",
+            "user prompt",
+            "session started", 
+            "session start",
             "claude code",
-            "hook system",
-            "session started"
+            "hook system"
         )
         
         val titleLower = event.title.lowercase()
@@ -367,6 +380,18 @@ class NotificationService(private val context: Context) {
             .build()
         
         try {
+            // Check if we have notification permission (API 33+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    Timber.w("POST_NOTIFICATIONS permission not granted for MCP server notification")
+                    return
+                }
+            }
+            
             notificationManager.notify(notificationId, notification)
             Timber.d("MCP server connection notification shown for $serverName: $isConnected")
         } catch (e: Exception) {
@@ -412,6 +437,18 @@ class NotificationService(private val context: Context) {
             .build()
         
         try {
+            // Check if we have notification permission (API 33+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    Timber.w("POST_NOTIFICATIONS permission not granted for MCP server error notification")
+                    return
+                }
+            }
+            
             notificationManager.notify(notificationId, notification)
             Timber.d("MCP server error notification shown for $serverName: $error")
         } catch (e: Exception) {
