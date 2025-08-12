@@ -152,25 +152,37 @@ object HookDataMapper {
         val toolName = when {
             payload.tool_name != null && 
             payload.tool_name.lowercase() !in listOf("unknown", "null", "") -> {
-                // Normalize common tool names to consistent format
-                when(payload.tool_name.lowercase()) {
-                    "bash", "bashttool" -> "Bash"
-                    "read", "readtool" -> "Read"
-                    "write", "writetool" -> "Write"
-                    "edit", "edittool" -> "Edit"
-                    "multiedit", "multiedittool" -> "MultiEdit"
-                    "grep", "greptool" -> "Grep"
-                    "glob", "globtool" -> "Glob"
-                    "ls", "lstool" -> "LS"
-                    "webfetch", "webfetchtool" -> "WebFetch"
-                    "websearch", "websearchtool" -> "WebSearch"
-                    "task", "tasktool" -> "Task"
-                    "todowrite", "todowritetool" -> "TodoWrite"
-                    "exitplanmode", "exitplanmodetool" -> "ExitPlanMode"
-                    "notebookedit", "notebookedittool" -> "NotebookEdit"
-                    "bashoutput", "bashoutputtool" -> "BashOutput"
-                    "killbash", "killbashtool" -> "KillBash"
-                    else -> payload.tool_name
+                // Check for MCP tool first
+                if (payload.tool_name.startsWith("mcp__")) {
+                    val parts = payload.tool_name.split("__")
+                    if (parts.size >= 3) {
+                        val server = parts[1].replaceFirstChar { it.uppercase() }
+                        val tool = parts[2].replace("_", " ").replaceFirstChar { it.uppercase() }
+                        "MCP: $server/$tool"
+                    } else {
+                        payload.tool_name
+                    }
+                } else {
+                    // Normalize common tool names to consistent format
+                    when(payload.tool_name.lowercase()) {
+                        "bash", "bashttool" -> "Bash"
+                        "read", "readtool" -> "Read"
+                        "write", "writetool" -> "Write"
+                        "edit", "edittool" -> "Edit"
+                        "multiedit", "multiedittool" -> "MultiEdit"
+                        "grep", "greptool" -> "Grep"
+                        "glob", "globtool" -> "Glob"
+                        "ls", "lstool" -> "LS"
+                        "webfetch", "webfetchtool" -> "WebFetch"
+                        "websearch", "websearchtool" -> "WebSearch"
+                        "task", "tasktool" -> "Task"
+                        "todowrite", "todowritetool" -> "TodoWrite"
+                        "exitplanmode", "exitplanmodetool" -> "ExitPlanMode"
+                        "notebookedit", "notebookedittool" -> "NotebookEdit"
+                        "bashoutput", "bashoutputtool" -> "BashOutput"
+                        "killbash", "killbashtool" -> "KillBash"
+                        else -> payload.tool_name
+                    }
                 }
             }
             payload.name != null -> payload.name
@@ -295,6 +307,11 @@ object HookDataMapper {
         
         redisData.payload.tool_name?.let { metadata["tool_name"] = it }
         redisData.payload.notification_type?.let { metadata["notification_type"] = it }
+        
+        // Add MCP metadata if available
+        redisData.payload.mcp_server?.let { metadata["mcp_server"] = it }
+        redisData.payload.mcp_tool?.let { metadata["mcp_tool"] = it }
+        redisData.payload.is_mcp_tool?.let { metadata["is_mcp_tool"] = it.toString() }
         redisData.payload.compact_reason?.let { metadata["compact_reason"] = it }
         
         return metadata

@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "f54318cd346c168d",
+        "id": "7f54e3820fd70532",
         "type": "tabs",
         "children": [
           {
-            "id": "1736b21b1e96aeac",
+            "id": "cbaa6072d6d1d40b",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "README.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "README"
+              "title": "New tab"
             }
           }
         ]
@@ -94,7 +90,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "README.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +99,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for README"
+              "title": "Backlinks"
             }
           },
           {
@@ -113,12 +108,11 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "README.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from README"
+              "title": "Outgoing links"
             }
           },
           {
@@ -142,13 +136,12 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "README.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of README"
+              "title": "Outline"
             }
           }
         ]
@@ -168,8 +161,13 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "1736b21b1e96aeac",
+  "active": "cbaa6072d6d1d40b",
   "lastOpenFiles": [
+    "2025-08-10.md",
+    "guides/EVENT_LIMITS_CONFIGURATION.md",
+    "ui-ux/QUIT_METHODS.md",
+    "ui-ux/CUTOUT_HANDLING.md",
+    "README.md",
     "README_hooks_dashboard.md",
     "ui-ux/UI_UX_IMPROVEMENTS.md",
     "ui-ux",
@@ -199,11 +197,6 @@
     "TROUBLESHOOTING.md",
     "SECURITY_PERFORMANCE.md",
     "MONITORING_DEBUG.md",
-    "INTEGRATION.md",
-    "INSTALLATION_SETUP.md",
-    "CONFIGURATION.md",
-    "hooks_dashboard/architecture/SECURITY_PERFORMANCE.md",
-    "hooks_dashboard/api/INTEGRATION.md",
     "hooks_dashboard/ui-ux",
     "hooks_dashboard/troubleshooting"
   ]

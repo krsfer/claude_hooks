@@ -92,10 +92,50 @@ fun AdaptiveContent() {
 
 ## Dashboard-Specific Optimizations
 
-### Top Bar Enhancement
-- **Cutout Indicator**: Shows "Cutout-optimized layout" when detected
-- **Status Icons**: Connection status positioned safely
-- **Title**: Centered with cutout awareness
+### Cutout-Aware Toolbar (New Implementation)
+- **Dual-Layout System**: Automatically switches between cutout and standard layouts
+- **Icon Distribution**: Icons positioned strategically around cutout areas
+- **Title Repositioning**: App title moved below cutout in optimized layout
+- **Space Utilization**: Maximum use of available screen real estate
+
+#### Cutout-Optimized Layout Features:
+- **Top Row**: Icons distributed on left/right sides of cutout
+- **Bottom Row**: Centered title with "Cutout-optimized layout" indicator
+- **Smart Grouping**: Connection indicators on left, action buttons on right
+- **Vertical Space**: Better use of height by stacking elements
+
+#### Standard Layout (Non-Cutout Devices):
+- **Traditional AppBar**: Uses Material 3 CenterAlignedTopAppBar
+- **Single Row**: All elements in standard horizontal arrangement
+- **Consistent Behavior**: Same functionality with conventional layout
+
+### Implementation Architecture
+
+#### CutoutAwareToolbar Component
+```kotlin
+@Composable
+fun CutoutAwareToolbar(
+    // Connection status and data
+    connectionStatus: ConnectionStatus,
+    lastUpdateTime: Instant?,
+    useTestData: Boolean,
+    
+    // Action callbacks
+    onTestDataToggle: () -> Unit,
+    onReconnect: () -> Unit,
+    onPerformanceToggle: () -> Unit,
+    // ... other callbacks
+    
+    // UI state management
+    scope: CoroutineScope,
+    snackbarHostState: SnackbarHostState
+)
+```
+
+#### Layout Decision Logic
+1. **Cutout Detection**: Uses `getCutoutInfo()` to detect device capabilities
+2. **Layout Selection**: Automatically chooses between optimized and standard layouts
+3. **Dynamic Adaptation**: Responds to cutout presence without user intervention
 
 ### Content Areas
 - **Stats Cards**: Horizontal scroll avoids cutout interference

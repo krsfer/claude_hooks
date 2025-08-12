@@ -390,20 +390,94 @@ build_json_payload() {
     # Extract tool name from the environment or payload
     local extracted_tool_name="unknown"
     
+    # Log tool extraction attempt for debugging
+    if [[ "$hook_type" == "pre_tool_use" || "$hook_type" == "post_tool_use" ]]; then
+        log_info "Attempting to extract tool name for $hook_type hook"
+        log_debug "Raw payload for tool extraction: ${hook_payload:0:500}"
+    fi
+    
+    # Initialize pattern detection flags
+    local detected_patterns=""
+    local special_metadata=""
+    
+    # Check for special patterns in payload and add notifications  
+    # Skip notification generation if we're already processing a notification to avoid recursion
+    if [[ "$hook_type" != "notification" ]] && command -v jq >/dev/null 2>&1 && [[ -n "$hook_payload" ]]; then
+        # Check for "User Prompt" pattern in prompt content
+        if echo "$hook_payload" | jq -r '.prompt // empty' 2>/dev/null | grep -qi "user prompt"; then
+            log_info "Detected 'User Prompt' pattern in payload"
+            detected_patterns="${detected_patterns}user_prompt,"
+            special_metadata="${special_metadata}\"user_prompt_detected\":true,"
+        fi
+        
+        # Check for "Session Started" pattern in prompt content
+        if echo "$hook_payload" | jq -r '.prompt // empty' 2>/dev/null | grep -qi "session start"; then
+            log_info "Detected 'Session Started' pattern in payload"
+            detected_patterns="${detected_patterns}session_started,"
+            special_metadata="${special_metadata}\"session_started_detected\":true,"
+        fi
+        
+        # Check for session_start hook type
+        if [[ "$hook_type" == "session_start" ]]; then
+            log_info "Session start hook detected - Claude Code session beginning"
+            detected_patterns="${detected_patterns}session_start_hook,"
+            special_metadata="${special_metadata}\"is_session_start\":true,"
+        fi
+        
+        # Check for user_prompt_submit hook type  
+        if [[ "$hook_type" == "user_prompt_submit" ]]; then
+            log_info "User prompt submit hook detected - User submitted prompt to Claude"
+            detected_patterns="${detected_patterns}user_prompt_submit_hook,"
+            special_metadata="${special_metadata}\"is_user_prompt_submit\":true,"
+        fi
+        
+        # Remove trailing comma from detected patterns
+        detected_patterns="${detected_patterns%,}"
+        special_metadata="${special_metadata%,}"
+    fi
+    
     # Try to get tool name from Claude Code environment variables
     if [[ -n "${CLAUDE_TOOL_NAME:-}" ]]; then
         extracted_tool_name="$CLAUDE_TOOL_NAME"
+        log_info "Using tool name from CLAUDE_TOOL_NAME: $extracted_tool_name"
+        
+        # Check if this is an MCP tool from environment variable
+        if [[ "$CLAUDE_TOOL_NAME" =~ ^mcp__([^_]+)__(.+)$ ]]; then
+            local mcp_server="${BASH_REMATCH[1]}"
+            local mcp_tool="${BASH_REMATCH[2]}"
+            log_info "Detected MCP tool from env: server='$mcp_server', tool='$mcp_tool'"
+            extracted_tool_name="MCP: ${mcp_server}/${mcp_tool}"
+            # Add MCP metadata to special metadata
+            special_metadata="${special_metadata}\"mcp_server\":\"$mcp_server\",\"mcp_tool\":\"$mcp_tool\",\"is_mcp_tool\":true,"
+        fi
     elif [[ -n "${CLAUDE_HOOK_MATCHER:-}" ]]; then
         # Extract tool name from Claude hook matcher (e.g., "BashTool" -> "Bash")
         extracted_tool_name="${CLAUDE_HOOK_MATCHER//Tool/}"
+        log_info "Using tool name from CLAUDE_HOOK_MATCHER: $extracted_tool_name"
     else
         # Try to extract from payload using multiple methods
         if command -v jq >/dev/null 2>&1; then
             # First try explicit tool_name field
             local payload_tool_name=$(echo "$payload_json" | jq -r '.tool_name // "unknown"' 2>/dev/null)
-            if [[ "$payload_tool_name" != "unknown" && "$payload_tool_name" != "null" ]]; then
+            log_debug "Extracted tool_name from JSON: '$payload_tool_name'"
+            local payload_tool_lower="$(echo "$payload_tool_name" | tr '[:upper:]' '[:lower:]')"
+            log_debug "tool_name lowercase: '$payload_tool_lower', checking against 'unknown'"
+            # Accept tool names that are not "unknown", "null", empty, or "Tool" (generic)
+            if [[ "$payload_tool_lower" != "unknown" && "$payload_tool_name" != "null" && -n "$payload_tool_name" && "$payload_tool_name" != "Tool" ]]; then
                 extracted_tool_name="$payload_tool_name"
+                log_info "Found tool_name in payload: $extracted_tool_name"
+                
+                # Check if this is an MCP tool and extract MCP metadata
+                if [[ "$payload_tool_name" =~ ^mcp__([^_]+)__(.+)$ ]]; then
+                    local mcp_server="${BASH_REMATCH[1]}"
+                    local mcp_tool="${BASH_REMATCH[2]}"
+                    log_info "Detected MCP tool: server='$mcp_server', tool='$mcp_tool'"
+                    extracted_tool_name="MCP: ${mcp_server}/${mcp_tool}"
+                    # Add MCP metadata to special metadata
+                    special_metadata="${special_metadata}\"mcp_server\":\"$mcp_server\",\"mcp_tool\":\"$mcp_tool\",\"is_mcp_tool\":true,"
+                fi
             else
+                log_debug "No valid tool_name in payload, attempting inference..."
                 # Try to infer from tool input patterns
                 local command_field=$(echo "$payload_json" | jq -r '.command // empty' 2>/dev/null)
                 local file_path_field=$(echo "$payload_json" | jq -r '.file_path // empty' 2>/dev/null)
@@ -417,21 +491,30 @@ build_json_payload() {
                 # Infer tool name from payload structure
                 if [[ -n "$command_field" ]]; then
                     extracted_tool_name="Bash"
+                    log_debug "Inferred tool: Bash (from command field)"
                 elif [[ -n "$file_path_field" && -n "$content_field" ]]; then
                     extracted_tool_name="Write"
+                    log_debug "Inferred tool: Write (from file_path + content)"
                 elif [[ -n "$file_path_field" && -n "$old_string_field" ]]; then
                     extracted_tool_name="Edit"
+                    log_debug "Inferred tool: Edit (from file_path + old_string)"
                 elif [[ -n "$file_path_field" ]]; then
                     extracted_tool_name="Read"
+                    log_debug "Inferred tool: Read (from file_path only)"
                 elif [[ -n "$pattern_field" ]]; then
                     extracted_tool_name="Grep"
+                    log_debug "Inferred tool: Grep (from pattern field)"
                 elif [[ -n "$path_field" ]]; then
                     extracted_tool_name="LS"
+                    log_debug "Inferred tool: LS (from path field)"
                 elif [[ -n "$url_field" ]]; then
                     extracted_tool_name="WebFetch"
+                    log_debug "Inferred tool: WebFetch (from url field)"
                 elif [[ -n "$query_field" ]]; then
                     extracted_tool_name="WebSearch"
+                    log_debug "Inferred tool: WebSearch (from query field)"
                 else
+                    log_debug "Could not infer tool from standard fields"
                     # Try to extract from nested structure
                     local nested_tool=$(echo "$payload_json" | jq -r '.tool_input.command // .tool_input.file_path // .tool_input.pattern // .tool_input.path // empty' 2>/dev/null)
                     if [[ -n "$nested_tool" ]]; then
@@ -447,8 +530,35 @@ build_json_payload() {
     fi
     
     # Update payload with extracted tool name if it's a tool use hook
+    # Only override if the current tool_name is unknown or if we detected a better one
     if [[ "$hook_type" == "pre_tool_use" || "$hook_type" == "post_tool_use" ]] && command -v jq >/dev/null 2>&1; then
-        payload_json=$(echo "$payload_json" | jq --arg tn "$extracted_tool_name" '.tool_name = $tn' 2>/dev/null || echo "$payload_json")
+        local current_tool_name=$(echo "$payload_json" | jq -r '.tool_name // "unknown"' 2>/dev/null)
+        local current_lower="$(echo "$current_tool_name" | tr '[:upper:]' '[:lower:]')"
+        
+        # Only override if current tool_name is unknown/generic or if extracted is more specific
+        if [[ "$current_lower" == "unknown" || "$current_tool_name" == "Tool" || "$extracted_tool_name" != "unknown" ]]; then
+            local final_tool_name="$extracted_tool_name"
+            # If enhance script already detected something better, keep it
+            if [[ "$current_lower" != "unknown" && "$current_tool_name" != "Tool" && "$extracted_tool_name" == "unknown" ]]; then
+                final_tool_name="$current_tool_name"
+            fi
+            log_info "Setting tool_name to '$final_tool_name' in payload for $hook_type (was: '$current_tool_name')"
+            payload_json=$(echo "$payload_json" | jq --arg tn "$final_tool_name" '.tool_name = $tn' 2>/dev/null || echo "$payload_json")
+        else
+            log_info "Keeping existing tool_name '$current_tool_name' in payload for $hook_type"
+        fi
+    fi
+    
+    # Add special metadata if patterns were detected
+    if [[ -n "$special_metadata" ]] && command -v jq >/dev/null 2>&1; then
+        # Add pattern detection metadata to payload
+        local pattern_metadata="{$special_metadata}"
+        if [[ -n "$detected_patterns" ]]; then
+            pattern_metadata=$(echo "$pattern_metadata" | jq --arg dp "$detected_patterns" '. + {"detected_patterns": $dp}' 2>/dev/null || echo "$pattern_metadata")
+        fi
+        payload_json=$(echo "$payload_json" | jq --argjson pm "$pattern_metadata" '. + {"pattern_detection": $pm}' 2>/dev/null || echo "$payload_json")
+        
+        log_debug "Added pattern detection metadata: $pattern_metadata"
     fi
 
     # Build the complete JSON

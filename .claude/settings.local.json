@@ -50,7 +50,22 @@
       "Bash(adb install:*)",
       "Bash(adb shell am force-stop:*)",
       "Bash(adb:*)",
-      "Bash(./test_system_notification.sh:*)"
+      "Bash(./test_system_notification.sh:*)",
+      "Bash(git rm:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)",
+      "Bash(kotlinc:*)",
+      "Bash(java:*)",
+      "Bash(./test_pattern_detection.sh:*)",
+      "Bash(./test_prompt_notification.sh:*)",
+      "Bash(./test_user_prompt_notification.sh:*)",
+      "Bash(./debug_hook_payload.sh)",
+      "Bash(export DEBUG=1)",
+      "Bash(DEBUG=1 whoami)",
+      "Bash(awk:*)",
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }

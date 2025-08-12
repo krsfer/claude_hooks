@@ -37,11 +37,9 @@ if [[ -z "$payload" ]]; then
 fi
 
 # Log the original payload for debugging
-if [[ "${DEBUG:-0}" == "1" ]]; then
-    echo "[DEBUG] Original payload: $payload" >&2
-    echo "[DEBUG] Hook type: $hook_type" >&2
-    echo "[DEBUG] Session ID: $session_id" >&2
-fi
+LOG_FILE="${CLAUDE_HOOKS_LOG:-$HOME/.claude/logs/hooks.log}"
+echo "[WRAPPER] Original payload from Claude Code: $payload" >> "$LOG_FILE" 2>/dev/null || true
+echo "[WRAPPER] Hook type: $hook_type, Session: $session_id" >> "$LOG_FILE" 2>/dev/null || true
 
 # Enhance the payload
 enhanced_payload=$(echo "$payload" | "${SCRIPT_DIR}/enhance_hook_payload.sh" "$hook_type")

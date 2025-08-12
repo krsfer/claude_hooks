@@ -69,7 +69,11 @@ data class PayloadData(
     val total_duration_ms: Long? = null,
     val total_tokens: Int? = null,
     val tools_used: Int? = null,
-    val reason: String? = null
+    val reason: String? = null,
+    // MCP (Model Context Protocol) tool metadata
+    val mcp_server: String? = null,        // e.g., "github", "memory", "filesystem"
+    val mcp_tool: String? = null,          // e.g., "create_repository", "read_file"
+    val is_mcp_tool: Boolean? = null       // true for MCP tools
 )
 
 @Serializable

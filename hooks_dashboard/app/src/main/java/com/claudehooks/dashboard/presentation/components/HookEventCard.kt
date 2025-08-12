@@ -237,6 +237,10 @@ fun HookEventCard(
                         Spacer(modifier = Modifier.width(12.dp))
                         // Show tool-specific icon and name for tool events
                         val toolName = event.metadata["tool_name"]
+                        val isMcpTool = event.metadata["is_mcp_tool"]?.toBoolean() == true
+                        val mcpServer = event.metadata["mcp_server"]
+                        val mcpTool = event.metadata["mcp_tool"]
+                        
                         if (toolName != null && toolName != "unknown" && toolName != "Unknown") {
                             Icon(
                                 imageVector = getToolIcon(toolName),
@@ -245,13 +249,47 @@ fun HookEventCard(
                                 tint = getToolColor(toolName)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = toolName,
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = getToolColor(toolName),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            
+                            if (isMcpTool && mcpServer != null && mcpTool != null) {
+                                // Special display for MCP tools with server badge
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    // MCP badge
+                                    Surface(
+                                        color = getToolColor(toolName).copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.padding(0.dp)
+                                    ) {
+                                        Text(
+                                            text = "MCP",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.sp
+                                            ),
+                                            color = getToolColor(toolName),
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "$mcpServer/$mcpTool",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        color = getToolColor(toolName),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                // Regular tool display
+                                Text(
+                                    text = toolName,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = getToolColor(toolName),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Code,
@@ -391,31 +429,69 @@ private fun formatAbsoluteTime(timestamp: Instant): String {
 /**
  * Get icon for specific tool name
  */
-private fun getToolIcon(toolName: String): ImageVector = when (toolName.lowercase()) {
-    "bash" -> Icons.Default.Terminal
-    "read" -> Icons.Default.Description
-    "write" -> Icons.Default.Edit
-    "edit", "multiedit" -> Icons.Default.EditNote
-    "grep", "glob" -> Icons.Default.Search
-    "ls" -> Icons.Default.FolderOpen
-    "webfetch", "websearch" -> Icons.Default.Language
-    "task" -> Icons.Default.Assignment
-    "todowrite" -> Icons.Default.CheckBox
-    "notebookedit" -> Icons.Default.Book
+private fun getToolIcon(toolName: String): ImageVector = when {
+    // MCP tools - check for "MCP: Server/Tool" format
+    toolName.startsWith("MCP: ") -> {
+        val serverPart = toolName.substringAfter("MCP: ").substringBefore("/").lowercase()
+        when (serverPart) {
+            "filesystem" -> Icons.Default.FolderOpen
+            "git" -> Icons.Default.AccountTree
+            "memory" -> Icons.Default.Psychology
+            "github" -> Icons.Default.Cloud // Note: Would use Icons.Default.GitHub if available
+            "slack" -> Icons.Default.Chat
+            "postgres", "sqlite", "redis" -> Icons.Default.Storage
+            "fetch" -> Icons.Default.CloudDownload
+            "time" -> Icons.Default.AccessTime
+            "alpaca", "stripe" -> Icons.Default.CurrencyExchange
+            "notion" -> Icons.Default.Description
+            "atlassian" -> Icons.Default.BugReport
+            else -> Icons.Default.Api // Generic MCP tool icon
+        }
+    }
+    // Regular tools
+    toolName.lowercase() == "bash" -> Icons.Default.Terminal
+    toolName.lowercase() == "read" -> Icons.Default.Description
+    toolName.lowercase() == "write" -> Icons.Default.Edit
+    toolName.lowercase() in listOf("edit", "multiedit") -> Icons.Default.EditNote
+    toolName.lowercase() in listOf("grep", "glob") -> Icons.Default.Search
+    toolName.lowercase() == "ls" -> Icons.Default.FolderOpen
+    toolName.lowercase() in listOf("webfetch", "websearch") -> Icons.Default.Language
+    toolName.lowercase() == "task" -> Icons.Default.Assignment
+    toolName.lowercase() == "todowrite" -> Icons.Default.CheckBox
+    toolName.lowercase() == "notebookedit" -> Icons.Default.Book
     else -> Icons.Default.Build
 }
 
 /**
  * Get color for specific tool name
  */
-private fun getToolColor(toolName: String): Color = when (toolName.lowercase()) {
-    "bash" -> Color(0xFF4CAF50) // Green
-    "read" -> Color(0xFF2196F3) // Blue
-    "write", "edit", "multiedit" -> Color(0xFFFF9800) // Orange
-    "grep", "glob" -> Color(0xFF9C27B0) // Purple
-    "ls" -> Color(0xFF00BCD4) // Cyan
-    "webfetch", "websearch" -> Color(0xFF3F51B5) // Indigo
-    "task" -> Color(0xFF795548) // Brown
-    "todowrite" -> Color(0xFF4CAF50) // Green
+private fun getToolColor(toolName: String): Color = when {
+    // MCP tools - purple/blue gradient theme for distinction
+    toolName.startsWith("MCP: ") -> {
+        val serverPart = toolName.substringAfter("MCP: ").substringBefore("/").lowercase()
+        when (serverPart) {
+            "filesystem" -> Color(0xFF9C27B0) // Purple
+            "git" -> Color(0xFF673AB7) // Deep Purple
+            "memory" -> Color(0xFF3F51B5) // Indigo
+            "github" -> Color(0xFF2196F3) // Blue
+            "slack" -> Color(0xFF00BCD4) // Cyan
+            "postgres", "sqlite", "redis" -> Color(0xFF009688) // Teal
+            "fetch" -> Color(0xFF4CAF50) // Green
+            "time" -> Color(0xFFFF9800) // Orange
+            "alpaca", "stripe" -> Color(0xFFE91E63) // Pink
+            "notion" -> Color(0xFF795548) // Brown
+            "atlassian" -> Color(0xFF607D8B) // Blue Grey
+            else -> Color(0xFF6A1B9A) // MCP purple theme
+        }
+    }
+    // Regular tools
+    toolName.lowercase() == "bash" -> Color(0xFF4CAF50) // Green
+    toolName.lowercase() == "read" -> Color(0xFF2196F3) // Blue
+    toolName.lowercase() in listOf("write", "edit", "multiedit") -> Color(0xFFFF9800) // Orange
+    toolName.lowercase() in listOf("grep", "glob") -> Color(0xFF9C27B0) // Purple
+    toolName.lowercase() == "ls" -> Color(0xFF00BCD4) // Cyan
+    toolName.lowercase() in listOf("webfetch", "websearch") -> Color(0xFF3F51B5) // Indigo
+    toolName.lowercase() == "task" -> Color(0xFF795548) // Brown
+    toolName.lowercase() == "todowrite" -> Color(0xFF4CAF50) // Green
     else -> Color(0xFF607D8B) // Blue Grey
 }

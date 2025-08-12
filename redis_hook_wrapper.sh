@@ -11,5 +11,5 @@ source ~/.claude/redis_config.env 2>/dev/null || {
     echo "Warning: Could not load Redis configuration from ~/.claude/redis_config.env" >&2
 }
 
-# Call the main hook script with all arguments
-exec "/Users/chris/dev/src/android/claude_hooks/claude_hook_redis.sh" "$@"
+# Call the enhanced hook wrapper that includes tool name detection
+exec "/Users/chris/dev/src/android/claude_hooks/claude_hook_redis_wrapper.sh" "$@"
